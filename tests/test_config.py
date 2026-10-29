@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -41,6 +42,21 @@ class TestConfig(unittest.TestCase):
             with mock.patch("screenshot_ai.config._get_default_key", return_value="fallback_key_abc"):
                 cfg = get_config()
                 self.assertEqual(cfg.gemini_api_key, "fallback_key_abc")
+
+    def test_load_env_from_meipass(self):
+        import tempfile
+        import sys
+        from screenshot_ai.config import _load_env
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text("PRIMARY_PROVIDER=cloudflare\nCLOUDFLARE_ACCOUNT_ID=test_cf_id\n", encoding="utf-8")
+            with mock.patch.object(sys, "frozen", True, create=True):
+                with mock.patch.object(sys, "_MEIPASS", tmpdir, create=True):
+                    with mock.patch.dict(os.environ, {}, clear=True):
+                        _load_env()
+                        self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "cloudflare")
+                        self.assertEqual(os.getenv("CLOUDFLARE_ACCOUNT_ID"), "test_cf_id")
 
 
     def test_get_config_valid(self):

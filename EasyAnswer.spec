@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
@@ -32,6 +33,9 @@ datas = []
 datas.append(('screenshot_ai/.env.example', '.'))
 # Include app.ico in assets
 datas.append(('screenshot_ai/assets/app.ico', 'assets'))
+# Bundle local .env into executable if present so it works standalone with zero setup
+if os.path.exists('.env'):
+    datas.append(('.env', '.'))
 
 a = Analysis(
     ['main.py'],

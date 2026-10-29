@@ -8,11 +8,16 @@ from dotenv import load_dotenv
 
 
 def _load_env() -> None:
-    """Load .env from the project folder or next to the packaged .exe."""
+    """Load .env from the project folder, next to the packaged .exe, or bundled internally."""
     current_dir = Path(__file__).resolve().parent
     candidates = []
     if getattr(sys, "frozen", False):
+        # 1. External .env placed next to EasyAnswer.exe (allows custom user overrides)
         candidates.append(Path(sys.executable).resolve().parent / ".env")
+        # 2. Bundled internal .env inside PyInstaller bundle (sys._MEIPASS)
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / ".env")
     candidates.extend(
         [
             current_dir.parent / ".env",
@@ -120,7 +125,6 @@ def get_config() -> Config:
             "Create a .env file (copy from .env.example) and add your Gemini API key from Google AI Studio."
         )
 
-
     model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
     hotkey = os.getenv("HOTKEY", "ctrl+shift+s").strip() or "ctrl+shift+s"
     toggle_hotkey = os.getenv("TOGGLE_HOTKEY", "ctrl+~").strip() or "ctrl+~"
@@ -155,7 +159,7 @@ def get_config() -> Config:
         quit_hotkey=quit_hotkey,
         show_tray_icon=_env_bool("SHOW_TRAY_ICON", False),
         auto_exit_minutes=max(0, _env_int("AUTO_EXIT_MINUTES", 15)),
-        enable_notifications=_env_bool("ENABLE_NOTIFICATIONS", True),
+        enable_notifications=_env_bool("ENABLE_NOTIFICATIONS", False),
         notification_duration_ms=max(1000, _env_int("NOTIFICATION_DURATION_MS", 4000)),
         watch_folder=watch_folder,
         start_minimized=_env_bool("START_MINIMIZED", False),
