@@ -151,19 +151,38 @@ class GeminiService:
                 elif provider == "gemini":
                     return self._analyze_with_gemini(image_path_obj, prompt, callback)
                 elif provider == "openrouter":
-                    return self._analyze_with_openai_compatible(
-                        url="https://openrouter.ai/api/v1/chat/completions",
-                        api_key=self.openrouter_api_key,
-                        model=self.openrouter_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="OpenRouter",
-                        extra_headers={
-                            "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
-                            "X-Title": "EasyAnswer",
-                        },
-                    )
+                    try:
+                        return self._analyze_with_openai_compatible(
+                            url="https://openrouter.ai/api/v1/chat/completions",
+                            api_key=self.openrouter_api_key,
+                            model=self.openrouter_model,
+                            image_path=image_path_obj,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="OpenRouter",
+                            extra_headers={
+                                "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
+                                "X-Title": "EasyAnswer",
+                            },
+                        )
+                    except Exception as or_err:
+                        # If primary model is down, automatically fallback to openrouter/free
+                        if self.openrouter_model != "openrouter/free":
+                            print(f"[openrouter] {self.openrouter_model} failed ({or_err}). Trying openrouter/free...")
+                            return self._analyze_with_openai_compatible(
+                                url="https://openrouter.ai/api/v1/chat/completions",
+                                api_key=self.openrouter_api_key,
+                                model="openrouter/free",
+                                image_path=image_path_obj,
+                                prompt=prompt,
+                                callback=callback,
+                                provider_name="OpenRouter (free router)",
+                                extra_headers={
+                                    "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
+                                    "X-Title": "EasyAnswer",
+                                },
+                            )
+                        raise
                 elif provider == "perplexity":
                     return self._analyze_with_openai_compatible(
                         url="https://api.perplexity.ai/chat/completions",
