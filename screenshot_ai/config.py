@@ -51,6 +51,10 @@ class Config:
     github_model: str = "gpt-4o-mini"
     openrouter_api_key: Optional[str] = None
     openrouter_model: str = "nvidia/nemotron-3.5-super-vl:free"
+    perplexity_api_key: Optional[str] = None
+    perplexity_model: str = "sonar"
+    groq_api_key: Optional[str] = None
+    groq_model: str = "llama-3.2-11b-vision-preview"
     primary_provider: str = "gemini"
 
 
@@ -107,9 +111,13 @@ def get_config() -> Config:
     github_model = os.getenv("GITHUB_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip() or None
     openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip() or "nvidia/nemotron-3.5-super-vl:free"
+    perplexity_api_key = os.getenv("PERPLEXITY_API_KEY", "").strip() or None
+    perplexity_model = os.getenv("PERPLEXITY_MODEL", "sonar").strip() or "sonar"
+    groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.2-11b-vision-preview").strip() or "llama-3.2-11b-vision-preview"
     primary_provider = os.getenv("PRIMARY_PROVIDER", "").strip().lower()
     if not primary_provider:
-        primary_provider = "openrouter" if openrouter_api_key else ("github" if github_token else "gemini")
+        primary_provider = "openrouter" if openrouter_api_key else ("perplexity" if perplexity_api_key else ("groq" if groq_api_key else ("github" if github_token else "gemini")))
 
     return Config(
         gemini_api_key=api_key,
@@ -131,6 +139,10 @@ def get_config() -> Config:
         github_model=github_model,
         openrouter_api_key=openrouter_api_key,
         openrouter_model=openrouter_model,
+        perplexity_api_key=perplexity_api_key,
+        perplexity_model=perplexity_model,
+        groq_api_key=groq_api_key,
+        groq_model=groq_model,
         primary_provider=primary_provider,
     )
 

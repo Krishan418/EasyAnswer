@@ -29,6 +29,10 @@ class GeminiService:
         github_model: Optional[str] = None,
         openrouter_api_key: Optional[str] = None,
         openrouter_model: Optional[str] = None,
+        perplexity_api_key: Optional[str] = None,
+        perplexity_model: Optional[str] = None,
+        groq_api_key: Optional[str] = None,
+        groq_model: Optional[str] = None,
         primary_provider: Optional[str] = None,
     ):
         if api_key is None:
@@ -44,6 +48,10 @@ class GeminiService:
             self.github_model = github_model or config.github_model
             self.openrouter_api_key = openrouter_api_key or config.openrouter_api_key
             self.openrouter_model = openrouter_model or config.openrouter_model
+            self.perplexity_api_key = perplexity_api_key or config.perplexity_api_key
+            self.perplexity_model = perplexity_model or config.perplexity_model
+            self.groq_api_key = groq_api_key or config.groq_api_key
+            self.groq_model = groq_model or config.groq_model
             self.primary_provider = primary_provider or config.primary_provider
         else:
             self.api_key = api_key
@@ -53,8 +61,12 @@ class GeminiService:
             self.github_token = github_token
             self.github_model = github_model or "gpt-4o-mini"
             self.openrouter_api_key = openrouter_api_key
-            self.openrouter_model = openrouter_model or "qwen/qwen-2.5-vl-72b-instruct:free"
-            self.primary_provider = primary_provider or ("github" if github_token else "gemini")
+            self.openrouter_model = openrouter_model or "nvidia/nemotron-3.5-super-vl:free"
+            self.perplexity_api_key = perplexity_api_key
+            self.perplexity_model = perplexity_model or "sonar"
+            self.groq_api_key = groq_api_key
+            self.groq_model = groq_model or "llama-3.2-11b-vision-preview"
+            self.primary_provider = primary_provider or ("openrouter" if openrouter_api_key else ("github" if github_token else "gemini"))
         # Initialize client
         self.client = genai.Client(api_key=self.api_key)
 
@@ -99,23 +111,29 @@ class GeminiService:
 
         # Determine execution order based on primary_provider
         provider_order = []
-        if self.primary_provider == "github" and self.github_token:
-            provider_order.append("github")
-            provider_order.append("gemini")
-        elif self.primary_provider == "openrouter" and self.openrouter_api_key:
+        if self.primary_provider == "openrouter" and self.openrouter_api_key:
             provider_order.append("openrouter")
-            if self.github_token:
-                provider_order.append("github")
-            provider_order.append("gemini")
+        elif self.primary_provider == "perplexity" and self.perplexity_api_key:
+            provider_order.append("perplexity")
+        elif self.primary_provider == "groq" and self.groq_api_key:
+            provider_order.append("groq")
+        elif self.primary_provider == "github" and self.github_token:
+            provider_order.append("github")
         else:
             provider_order.append("gemini")
-            if self.github_token:
-                provider_order.append("github")
 
-        if self.openrouter_api_key and "openrouter" not in provider_order:
-            provider_order.append("openrouter")
-        if self.grok_api_key and "grok" not in provider_order:
-            provider_order.append("grok")
+        # Add remaining configured providers in priority order
+        fallbacks = [
+            ("openrouter", self.openrouter_api_key),
+            ("perplexity", self.perplexity_api_key),
+            ("groq", self.groq_api_key),
+            ("github", self.github_token),
+            ("gemini", True),
+            ("grok", self.grok_api_key),
+        ]
+        for name, key in fallbacks:
+            if key and name not in provider_order:
+                provider_order.append(name)
 
         errors = []
         for provider in provider_order:
@@ -145,6 +163,26 @@ class GeminiService:
                             "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
                             "X-Title": "EasyAnswer",
                         },
+                    )
+                elif provider == "perplexity":
+                    return self._analyze_with_openai_compatible(
+                        url="https://api.perplexity.ai/chat/completions",
+                        api_key=self.perplexity_api_key,
+                        model=self.perplexity_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="Perplexity AI",
+                    )
+                elif provider == "groq":
+                    return self._analyze_with_openai_compatible(
+                        url="https://api.groq.com/openai/v1/chat/completions",
+                        api_key=self.groq_api_key,
+                        model=self.groq_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="Groq Cloud",
                     )
                 elif provider == "grok":
                     return self._analyze_with_grok(image_path_obj, prompt, callback)
