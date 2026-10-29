@@ -109,7 +109,7 @@ def get_config() -> Config:
     openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip() or "nvidia/nemotron-3.5-super-vl:free"
     primary_provider = os.getenv("PRIMARY_PROVIDER", "").strip().lower()
     if not primary_provider:
-        primary_provider = "github" if github_token else "gemini"
+        primary_provider = "openrouter" if openrouter_api_key else ("github" if github_token else "gemini")
 
     return Config(
         gemini_api_key=api_key,
