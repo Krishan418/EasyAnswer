@@ -47,82 +47,83 @@ def _register_hard_exit() -> None:
 
 POPUP_STYLESHEET = """
 QDialog {
-    background-color: #f8fafc;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
+    background-color: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
 }
 QLabel#titleLabel {
-    color: #0f172a;
-    font-size: 11px;
-    font-weight: 700;
+    color: #64748b;
+    font-size: 8px;
+    font-weight: 600;
 }
 QLabel#subtitleLabel {
-    color: #64748b;
-    font-size: 9px;
+    color: #475569;
+    font-size: 7.5px;
 }
 QProgressBar#progressBar {
     border: none;
-    background-color: #e2e8f0;
-    height: 2px;
+    background-color: #1e293b;
+    height: 1px;
     border-radius: 1px;
 }
 QProgressBar#progressBar::chunk {
-    background-color: #2563eb;
+    background-color: #38bdf8;
     border-radius: 1px;
 }
 QTextBrowser {
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 5px;
-    padding: 6px 8px;
-    color: #0f172a;
-    font-size: 11px;
-    selection-background-color: #bfdbfe;
+    background-color: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 3px 5px;
+    color: #f1f5f9;
+    font-size: 9.5px;
+    line-height: 1.2;
+    selection-background-color: #334155;
 }
 QPushButton {
-    background-color: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    padding: 2px 7px;
-    color: #334155;
-    font-size: 10px;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 3px;
+    padding: 1px 4px;
+    color: #94a3b8;
+    font-size: 8px;
     font-weight: 500;
 }
 QPushButton:hover {
-    background-color: #f1f5f9;
-    border-color: #94a3b8;
+    background-color: #334155;
+    color: #f8fafc;
 }
 QPushButton:pressed {
-    background-color: #e2e8f0;
+    background-color: #0f172a;
 }
 QPushButton:disabled {
-    color: #cbd5e1;
-    border-color: #f1f5f9;
+    color: #475569;
+    border-color: #1e293b;
 }
 QPushButton#closeButton {
     background-color: transparent;
     border: none;
-    color: #94a3b8;
-    font-size: 14px;
+    color: #64748b;
+    font-size: 11px;
     font-weight: bold;
     padding: 0px;
-    min-width: 18px;
-    max-width: 18px;
-    min-height: 18px;
-    max-height: 18px;
-    border-radius: 9px;
+    min-width: 14px;
+    max-width: 14px;
+    min-height: 14px;
+    max-height: 14px;
+    border-radius: 7px;
 }
 QPushButton#closeButton:hover {
-    background-color: #fee2e2;
-    color: #ef4444;
+    background-color: #334155;
+    color: #f87171;
 }
 QLabel#statusLabel {
-    color: #2563eb;
-    font-size: 9px;
+    color: #38bdf8;
+    font-size: 8px;
 }
 QLabel#errorLabel {
-    color: #dc2626;
-    font-size: 9px;
+    color: #f87171;
+    font-size: 8px;
 }
 """
 
@@ -170,23 +171,45 @@ class ResultPopup(QDialog):
         self._cleanup_after = False
         self._has_positioned = False
 
+        try:
+            from .config import get_config
+            cfg = get_config()
+            popup_w = cfg.popup_width
+            popup_h = cfg.popup_height
+            popup_op = cfg.popup_opacity
+        except Exception:
+            popup_w, popup_h, popup_op = 260, 85, 0.88
+
         self.setWindowTitle("EasyAnswer")
         self.setWindowIcon(build_app_icon())
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.CustomizeWindowHint
-            | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.FramelessWindowHint
         )
+        self.setWindowOpacity(popup_op)
         self.setStyleSheet(POPUP_STYLESHEET)
-        self.resize(340, 180)
-        self.setMinimumSize(250, 120)
+        self.resize(popup_w, popup_h)
+        self.setMinimumSize(180, 50)
 
         self._build_ui()
         self._reset_view()
 
     # ------------------------------------------------------------------ UI --
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, "_drag_pos"):
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
     def position_bottom_right(self) -> None:
         """Position window neatly at the bottom-right corner above taskbar."""
         screen = QGuiApplication.primaryScreen()
@@ -208,48 +231,48 @@ class ResultPopup(QDialog):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(8, 6, 8, 6)
-        root.setSpacing(4)
+        root.setContentsMargins(4, 3, 4, 3)
+        root.setSpacing(2)
 
         header = QHBoxLayout()
-        header.setSpacing(5)
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(3)
 
-        title_box = QVBoxLayout()
-        title_box.setSpacing(0)
-
-        self.title_label = QLabel("EasyAnswer")
+        self.title_label = QLabel("•")
         self.title_label.setObjectName("titleLabel")
 
-        self.subtitle_label = QLabel("Ready")
+        self.subtitle_label = QLabel("")
         self.subtitle_label.setObjectName("subtitleLabel")
         self.subtitle_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
 
-        title_box.addWidget(self.title_label)
-        title_box.addWidget(self.subtitle_label)
-        header.addLayout(title_box, 1)
+        header.addWidget(self.title_label)
+        header.addWidget(self.subtitle_label, 1)
 
-        self.analyze_button = QPushButton("Pick\u2026")
-        self.analyze_button.setToolTip("Select an image file to analyze")
+        self.analyze_button = QPushButton("Pick")
+        self.analyze_button.setToolTip("Select image")
         self.analyze_button.clicked.connect(self.choose_and_analyze)
-        header.addWidget(self.analyze_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.analyze_button.setVisible(False)
+        header.addWidget(self.analyze_button)
 
         self.copy_button = QPushButton("Copy")
+        self.copy_button.setToolTip("Copy result")
         self.copy_button.clicked.connect(self.copy_result)
         self.copy_button.setEnabled(False)
-        header.addWidget(self.copy_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.copy_button.setVisible(False)
+        header.addWidget(self.copy_button)
 
         self.close_button = QPushButton("\u00d7")
         self.close_button.setObjectName("closeButton")
         self.close_button.setToolTip("Close (Esc)")
         self.close_button.clicked.connect(self.close)
-        header.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignTop)
+        header.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignRight)
 
         root.addLayout(header)
 
         # Thin animated progress bar for loading
         self.progress_bar = QProgressBar()
         self.progress_bar.setObjectName("progressBar")
-        self.progress_bar.setFixedHeight(2)
+        self.progress_bar.setFixedHeight(1)
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setVisible(False)
         root.addWidget(self.progress_bar)
@@ -271,10 +294,7 @@ class ResultPopup(QDialog):
     # ---------------------------------------------------------------- state --
     def _reset_view(self) -> None:
         self.result_view.clear()
-        self.result_view.setPlaceholderText(
-            "Copy a snip with Win+Shift+S, then press Ctrl+Shift+S.\n"
-            "The direct answer will appear here instantly."
-        )
+        self.result_view.setPlaceholderText("Ready. Win+Shift+S -> Ctrl+Shift+S")
         self.copy_button.setEnabled(False)
         self.analyze_button.setEnabled(True)
         self.progress_bar.setVisible(False)
@@ -288,7 +308,7 @@ class ResultPopup(QDialog):
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setVisible(True)
             self.result_view.setHtml(
-                "<p style='color:#64748b; font-size:11px;'>⚡ Analyzing screenshot with Gemini&hellip;</p>"
+                "<p style='color:#64748b; font-size:9.5px; margin:0;'>⚡ Analyzing&hellip;</p>"
             )
         else:
             self.progress_bar.setVisible(False)

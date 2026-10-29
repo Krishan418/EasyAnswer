@@ -56,6 +56,9 @@ class Config:
     groq_api_key: Optional[str] = None
     groq_model: str = "llama-3.2-11b-vision-preview"
     primary_provider: str = "gemini"
+    popup_width: int = 260
+    popup_height: int = 85
+    popup_opacity: float = 0.88
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -71,6 +74,16 @@ def _env_int(name: str, default: int) -> int:
         return default
     try:
         return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
     except ValueError:
         return default
 
@@ -144,6 +157,9 @@ def get_config() -> Config:
         groq_api_key=groq_api_key,
         groq_model=groq_model,
         primary_provider=primary_provider,
+        popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
+        popup_height=max(50, _env_int("POPUP_HEIGHT", 85)),
+        popup_opacity=min(1.0, max(0.2, _env_float("POPUP_OPACITY", 0.88))),
     )
 
 
