@@ -70,7 +70,7 @@ class Config:
     primary_provider: str = "openrouter"
     popup_width: int = 260
     popup_height: int = 85
-    popup_opacity: float = 0.82
+    popup_opacity: float = 0.70
     auto_show_popup: bool = False
 
 
@@ -185,7 +185,7 @@ def get_config() -> Config:
         primary_provider=primary_provider,
         popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
         popup_height=max(50, _env_int("POPUP_HEIGHT", 85)),
-        popup_opacity=min(1.0, max(0.2, _env_float("POPUP_OPACITY", 0.82))),
+        popup_opacity=min(1.0, max(0.2, _env_float("POPUP_OPACITY", 0.70))),
         auto_show_popup=_env_bool("AUTO_SHOW_POPUP", False),
     )
 

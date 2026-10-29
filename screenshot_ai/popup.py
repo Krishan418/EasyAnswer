@@ -47,8 +47,8 @@ def _register_hard_exit() -> None:
 
 POPUP_STYLESHEET = """
 QDialog {
-    background-color: #ffffff;
-    border: 1px solid #d1d5db;
+    background-color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(209, 213, 219, 0.85);
     border-radius: 6px;
 }
 QLabel#titleLabel {
@@ -62,7 +62,7 @@ QLabel#subtitleLabel {
 }
 QProgressBar#progressBar {
     border: none;
-    background-color: #f3f4f6;
+    background-color: rgba(243, 244, 246, 0.7);
     height: 1px;
     border-radius: 1px;
 }
@@ -71,8 +71,8 @@ QProgressBar#progressBar::chunk {
     border-radius: 1px;
 }
 QTextBrowser {
-    background-color: #ffffff;
-    border: 1px solid #e5e7eb;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(229, 231, 235, 0.75);
     border-radius: 4px;
     padding: 3px 5px;
     color: #111827;
@@ -82,11 +82,11 @@ QTextBrowser {
     selection-color: #111827;
 }
 QPushButton {
-    background-color: #f9fafb;
-    border: 1px solid #d1d5db;
+    background-color: rgba(249, 250, 251, 0.75);
+    border: 1px solid rgba(209, 213, 219, 0.75);
     border-radius: 3px;
     padding: 1px 4px;
-    color: #4b5563;
+    color: #374151;
     font-size: 8px;
     font-weight: 500;
 }
@@ -184,6 +184,7 @@ class ResultPopup(QDialog):
 
         self.setWindowTitle("EasyAnswer")
         self.setWindowIcon(build_app_icon())
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowFlags(
             Qt.WindowType.Tool
             | Qt.WindowType.WindowStaysOnTopHint
@@ -224,12 +225,31 @@ class ResultPopup(QDialog):
         self.move(x, y)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt override
-        """Press Esc to instantly close the popup."""
+        """Press Esc to close, or Ctrl+[ / Ctrl+] to adjust transparency on the fly."""
         if event.key() == Qt.Key.Key_Escape:
             self.close()
             event.accept()
+        elif event.key() == Qt.Key.Key_BracketLeft and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            new_op = max(0.20, round(self.windowOpacity() - 0.05, 2))
+            self.setWindowOpacity(new_op)
+            event.accept()
+        elif event.key() == Qt.Key.Key_BracketRight and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            new_op = min(1.0, round(self.windowOpacity() + 0.05, 2))
+            self.setWindowOpacity(new_op)
+            event.accept()
         else:
             super().keyPressEvent(event)
+
+    def wheelEvent(self, event) -> None:  # noqa: N802 - Qt override
+        """Ctrl + Mouse Wheel adjusts transparency smoothly in real-time."""
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            step = 0.05 if delta > 0 else -0.05
+            new_op = max(0.20, min(1.0, round(self.windowOpacity() + step, 2)))
+            self.setWindowOpacity(new_op)
+            event.accept()
+            return
+        super().wheelEvent(event)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
