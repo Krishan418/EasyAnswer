@@ -235,20 +235,29 @@ class ApplicationController:
         """Clipboard-first action: analyze a copied snip, else open the window."""
         self._reset_idle_timer()
         if self.popup.is_busy:
-            self.open_popup()
+            if self.config.auto_show_popup:
+                self.open_popup()
             return
 
         if self.config.clipboard_on_hotkey:
             clipboard_image = self._read_clipboard_image(silent=True)
             if clipboard_image:
-                self.popup.show_and_analyze(
-                    clipboard_image,
-                    source_label="Clipboard image",
-                    cleanup_after=True,
-                )
+                if self.config.auto_show_popup:
+                    self.popup.show_and_analyze(
+                        clipboard_image,
+                        source_label="Clipboard image",
+                        cleanup_after=True,
+                    )
+                else:
+                    self.popup.analyze_file(
+                        clipboard_image,
+                        source_label="Clipboard image",
+                        cleanup_after=True,
+                    )
                 return
 
-        self.open_popup()
+        if self.config.auto_show_popup:
+            self.open_popup()
 
     def choose_screenshot(self) -> None:
         self._reset_idle_timer()
@@ -441,7 +450,10 @@ class ApplicationController:
         if self.popup.is_busy:
             self._enqueue(file_path)
             return
-        self.popup.show_and_analyze(file_path)
+        if self.config.auto_show_popup:
+            self.popup.show_and_analyze(file_path)
+        else:
+            self.popup.analyze_file(file_path)
 
     def _enqueue(self, file_path: str) -> None:
         if file_path in self._pending:
@@ -463,13 +475,13 @@ class ApplicationController:
             return
 
     def _on_analysis_completed(self, _text: str) -> None:
-        if not self.popup.isVisible():
+        if self.config.enable_notifications and self.config.auto_show_popup and not self.popup.isVisible():
             self.notifier.notify(
                 "Analysis complete. Click to view the result."
             )
 
     def _on_analysis_failed(self, _message: str) -> None:
-        if not self.popup.isVisible():
+        if self.config.enable_notifications and self.config.auto_show_popup and not self.popup.isVisible():
             self.notifier.notify("Analysis failed. Click to see the details.")
 
     # ----------------------------------------------------------------- startup --
