@@ -155,6 +155,55 @@ class TestGeminiService(unittest.TestCase):
             # Gemini stream should NOT have been called because GitHub succeeded as primary!
             mock_client.models.generate_content_stream.assert_not_called()
 
+    @mock.patch("google.genai.Client")
+    def test_mistral_as_primary_provider(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            api_key="dummy_key",
+            mistral_api_key="test_mistral_key",
+            primary_provider="mistral",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Option D (Mistral)") as mock_mistral:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "Option D (Mistral)")
+            mock_mistral.assert_called_once()
+            args, kwargs = mock_mistral.call_args
+            self.assertEqual(kwargs.get("provider_name"), "Mistral AI")
+            self.assertEqual(kwargs.get("model"), "pixtral-12b-2409")
+
+    @mock.patch("google.genai.Client")
+    def test_openrouter_model_auto_fallback(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            api_key="dummy_key",
+            openrouter_api_key="sk-or-v1-dummy",
+            primary_provider="openrouter",
+        )
+
+        # First call with primary model fails, second call with openrouter/free succeeds
+        calls = []
+        def side_effect(*args, **kwargs):
+            model = kwargs.get("model")
+            calls.append(model)
+            if model != "openrouter/free":
+                raise Exception("429 Rate Limit on primary model")
+            return "Option A (Free Router)"
+
+        with mock.patch.object(service, "_analyze_with_openai_compatible", side_effect=side_effect):
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "Option A (Free Router)")
+            self.assertIn("openrouter/free", calls)
+
 
 if __name__ == "__main__":
     unittest.main()

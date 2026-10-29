@@ -33,6 +33,13 @@ class GeminiService:
         perplexity_model: Optional[str] = None,
         groq_api_key: Optional[str] = None,
         groq_model: Optional[str] = None,
+        mistral_api_key: Optional[str] = None,
+        mistral_model: Optional[str] = None,
+        cloudflare_account_id: Optional[str] = None,
+        cloudflare_api_token: Optional[str] = None,
+        cloudflare_model: Optional[str] = None,
+        huggingface_api_token: Optional[str] = None,
+        huggingface_model: Optional[str] = None,
         primary_provider: Optional[str] = None,
     ):
         if api_key is None:
@@ -52,6 +59,13 @@ class GeminiService:
             self.perplexity_model = perplexity_model or config.perplexity_model
             self.groq_api_key = groq_api_key or config.groq_api_key
             self.groq_model = groq_model or config.groq_model
+            self.mistral_api_key = mistral_api_key or config.mistral_api_key
+            self.mistral_model = mistral_model or config.mistral_model
+            self.cloudflare_account_id = cloudflare_account_id or config.cloudflare_account_id
+            self.cloudflare_api_token = cloudflare_api_token or config.cloudflare_api_token
+            self.cloudflare_model = cloudflare_model or config.cloudflare_model
+            self.huggingface_api_token = huggingface_api_token or config.huggingface_api_token
+            self.huggingface_model = huggingface_model or config.huggingface_model
             self.primary_provider = primary_provider or config.primary_provider
         else:
             self.api_key = api_key
@@ -66,6 +80,13 @@ class GeminiService:
             self.perplexity_model = perplexity_model or "sonar"
             self.groq_api_key = groq_api_key
             self.groq_model = groq_model or "llama-3.2-11b-vision-preview"
+            self.mistral_api_key = mistral_api_key
+            self.mistral_model = mistral_model or "pixtral-12b-2409"
+            self.cloudflare_account_id = cloudflare_account_id
+            self.cloudflare_api_token = cloudflare_api_token
+            self.cloudflare_model = cloudflare_model or "@cf/meta/llama-3.2-11b-vision-instruct"
+            self.huggingface_api_token = huggingface_api_token
+            self.huggingface_model = huggingface_model or "meta-llama/Llama-3.2-11B-Vision-Instruct"
             self.primary_provider = primary_provider or ("openrouter" if openrouter_api_key else ("github" if github_token else "gemini"))
         # Initialize client
         self.client = genai.Client(api_key=self.api_key)
@@ -113,6 +134,12 @@ class GeminiService:
         provider_order = []
         if self.primary_provider == "openrouter" and self.openrouter_api_key:
             provider_order.append("openrouter")
+        elif self.primary_provider == "mistral" and self.mistral_api_key:
+            provider_order.append("mistral")
+        elif self.primary_provider == "cloudflare" and self.cloudflare_api_token:
+            provider_order.append("cloudflare")
+        elif self.primary_provider == "huggingface" and self.huggingface_api_token:
+            provider_order.append("huggingface")
         elif self.primary_provider == "perplexity" and self.perplexity_api_key:
             provider_order.append("perplexity")
         elif self.primary_provider == "groq" and self.groq_api_key:
@@ -125,6 +152,9 @@ class GeminiService:
         # Add remaining configured providers in priority order
         fallbacks = [
             ("openrouter", self.openrouter_api_key),
+            ("mistral", self.mistral_api_key),
+            ("cloudflare", self.cloudflare_api_token and self.cloudflare_account_id),
+            ("huggingface", self.huggingface_api_token),
             ("perplexity", self.perplexity_api_key),
             ("groq", self.groq_api_key),
             ("github", self.github_token),
@@ -183,6 +213,38 @@ class GeminiService:
                                 },
                             )
                         raise
+                elif provider == "mistral":
+                    return self._analyze_with_openai_compatible(
+                        url="https://api.mistral.ai/v1/chat/completions",
+                        api_key=self.mistral_api_key,
+                        model=self.mistral_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="Mistral AI",
+                    )
+                elif provider == "cloudflare":
+                    url = f"https://api.cloudflare.com/client/v4/accounts/{self.cloudflare_account_id}/ai/v1/chat/completions"
+                    return self._analyze_with_openai_compatible(
+                        url=url,
+                        api_key=self.cloudflare_api_token,
+                        model=self.cloudflare_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="Cloudflare Workers AI",
+                    )
+                elif provider == "huggingface":
+                    url = f"https://api-inference.huggingface.co/models/{self.huggingface_model}/v1/chat/completions"
+                    return self._analyze_with_openai_compatible(
+                        url=url,
+                        api_key=self.huggingface_api_token,
+                        model=self.huggingface_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="Hugging Face",
+                    )
                 elif provider == "perplexity":
                     return self._analyze_with_openai_compatible(
                         url="https://api.perplexity.ai/chat/completions",

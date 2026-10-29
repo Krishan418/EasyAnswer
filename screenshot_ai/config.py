@@ -55,6 +55,13 @@ class Config:
     perplexity_model: str = "sonar"
     groq_api_key: Optional[str] = None
     groq_model: str = "llama-3.2-11b-vision-preview"
+    mistral_api_key: Optional[str] = None
+    mistral_model: str = "pixtral-12b-2409"
+    cloudflare_account_id: Optional[str] = None
+    cloudflare_api_token: Optional[str] = None
+    cloudflare_model: str = "@cf/meta/llama-3.2-11b-vision-instruct"
+    huggingface_api_token: Optional[str] = None
+    huggingface_model: str = "meta-llama/Llama-3.2-11B-Vision-Instruct"
     primary_provider: str = "openrouter"
     popup_width: int = 260
     popup_height: int = 85
@@ -128,9 +135,16 @@ def get_config() -> Config:
     perplexity_model = os.getenv("PERPLEXITY_MODEL", "sonar").strip() or "sonar"
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
     groq_model = os.getenv("GROQ_MODEL", "llama-3.2-11b-vision-preview").strip() or "llama-3.2-11b-vision-preview"
+    mistral_api_key = os.getenv("MISTRAL_API_KEY", "").strip() or None
+    mistral_model = os.getenv("MISTRAL_MODEL", "pixtral-12b-2409").strip() or "pixtral-12b-2409"
+    cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip() or None
+    cloudflare_api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip() or None
+    cloudflare_model = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.2-11b-vision-instruct").strip() or "@cf/meta/llama-3.2-11b-vision-instruct"
+    huggingface_api_token = os.getenv("HUGGINGFACE_API_TOKEN", "").strip() or None
+    huggingface_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.2-11B-Vision-Instruct").strip() or "meta-llama/Llama-3.2-11B-Vision-Instruct"
     primary_provider = os.getenv("PRIMARY_PROVIDER", "openrouter").strip().lower()
     if not primary_provider:
-        primary_provider = "openrouter" if openrouter_api_key else ("perplexity" if perplexity_api_key else ("groq" if groq_api_key else ("github" if github_token else "gemini")))
+        primary_provider = "openrouter" if openrouter_api_key else ("mistral" if mistral_api_key else ("cloudflare" if cloudflare_api_token else ("perplexity" if perplexity_api_key else ("groq" if groq_api_key else ("github" if github_token else "gemini")))))
 
     return Config(
         gemini_api_key=api_key,
@@ -156,6 +170,13 @@ def get_config() -> Config:
         perplexity_model=perplexity_model,
         groq_api_key=groq_api_key,
         groq_model=groq_model,
+        mistral_api_key=mistral_api_key,
+        mistral_model=mistral_model,
+        cloudflare_account_id=cloudflare_account_id,
+        cloudflare_api_token=cloudflare_api_token,
+        cloudflare_model=cloudflare_model,
+        huggingface_api_token=huggingface_api_token,
+        huggingface_model=huggingface_model,
         primary_provider=primary_provider,
         popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
         popup_height=max(50, _env_int("POPUP_HEIGHT", 85)),

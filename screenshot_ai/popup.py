@@ -300,6 +300,9 @@ class ResultPopup(QDialog):
             cfg = get_config()
             mapping = {
                 "openrouter": "OpenRouter",
+                "mistral": "Mistral AI",
+                "cloudflare": "Cloudflare AI",
+                "huggingface": "Hugging Face",
                 "gemini": "Gemini",
                 "groq": "Groq",
                 "perplexity": "Perplexity",
