@@ -47,6 +47,10 @@ class Config:
     watch_common_folders: bool = False
     grok_api_key: Optional[str] = None
     grok_model: str = "grok-2-vision-1212"
+    github_token: Optional[str] = None
+    github_model: str = "gpt-4o-mini"
+    openrouter_api_key: Optional[str] = None
+    openrouter_model: str = "qwen/qwen-2.5-vl-72b-instruct:free"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -98,6 +102,10 @@ def get_config() -> Config:
     watch_folder = os.getenv("WATCH_FOLDER", "").strip() or None
     grok_api_key = os.getenv("GROK_API_KEY", "").strip() or None
     grok_model = os.getenv("GROK_MODEL", "grok-2-vision-1212").strip() or "grok-2-vision-1212"
+    github_token = os.getenv("GITHUB_TOKEN", "").strip() or None
+    github_model = os.getenv("GITHUB_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip() or None
+    openrouter_model = os.getenv("OPENROUTER_MODEL", "qwen/qwen-2.5-vl-72b-instruct:free").strip() or "qwen/qwen-2.5-vl-72b-instruct:free"
 
     return Config(
         gemini_api_key=api_key,
@@ -115,6 +123,10 @@ def get_config() -> Config:
         watch_common_folders=_env_bool("WATCH_COMMON_FOLDERS", False),
         grok_api_key=grok_api_key,
         grok_model=grok_model,
+        github_token=github_token,
+        github_model=github_model,
+        openrouter_api_key=openrouter_api_key,
+        openrouter_model=openrouter_model,
     )
 
 

@@ -117,6 +117,24 @@ class TestGeminiService(unittest.TestCase):
             self.assertEqual(result, "**Answer: Option B** (Grok)")
             mock_grok.assert_called_once()
 
+    @mock.patch("google.genai.Client")
+    def test_github_models_fallback_on_gemini_error(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.side_effect = Exception("Network blocked")
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(api_key="dummy_key", github_token="ghp_test_token")
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option A** (GitHub)") as mock_fallback:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option A** (GitHub)")
+            mock_fallback.assert_called_once()
+            args, kwargs = mock_fallback.call_args
+            self.assertEqual(kwargs.get("provider_name"), "GitHub Models")
+            self.assertEqual(kwargs.get("model"), "gpt-4o-mini")
+
 
 if __name__ == "__main__":
     unittest.main()

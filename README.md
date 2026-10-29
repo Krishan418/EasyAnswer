@@ -136,6 +136,10 @@ The application will start, open the floating popup, and register itself in the 
 | `WATCH_COMMON_FOLDERS` | `false` | Automatically monitor `Pictures\Screenshots`, `OneDrive`, and `Desktop` |
 | `GROK_API_KEY` | *(Optional)* | xAI Grok API key for automatic vision fallback if Gemini is blocked |
 | `GROK_MODEL` | `grok-2-vision-1212` | Model identifier used for Grok Vision fallback |
+| `GITHUB_TOKEN` | *(Optional)* | GitHub Personal Access Token for GitHub Models (GPT-4o-mini vision fallback) |
+| `GITHUB_MODEL` | `gpt-4o-mini` | Model identifier for GitHub Models fallback |
+| `OPENROUTER_API_KEY` | *(Optional)* | OpenRouter API key for multi-model vision fallback |
+| `OPENROUTER_MODEL` | `qwen/qwen-2.5-vl-72b-instruct:free` | Model identifier for OpenRouter fallback |
 
 ---
 

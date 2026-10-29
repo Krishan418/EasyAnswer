@@ -25,6 +25,10 @@ class GeminiService:
         model: Optional[str] = None,
         grok_api_key: Optional[str] = None,
         grok_model: Optional[str] = None,
+        github_token: Optional[str] = None,
+        github_model: Optional[str] = None,
+        openrouter_api_key: Optional[str] = None,
+        openrouter_model: Optional[str] = None,
     ):
         if api_key is None:
             try:
@@ -35,11 +39,19 @@ class GeminiService:
             self.model = model or config.gemini_model
             self.grok_api_key = grok_api_key or config.grok_api_key
             self.grok_model = grok_model or config.grok_model
+            self.github_token = github_token or config.github_token
+            self.github_model = github_model or config.github_model
+            self.openrouter_api_key = openrouter_api_key or config.openrouter_api_key
+            self.openrouter_model = openrouter_model or config.openrouter_model
         else:
             self.api_key = api_key
             self.model = model or "gemini-3.5-flash"
             self.grok_api_key = grok_api_key
             self.grok_model = grok_model or "grok-2-vision-1212"
+            self.github_token = github_token
+            self.github_model = github_model or "gpt-4o-mini"
+            self.openrouter_api_key = openrouter_api_key
+            self.openrouter_model = openrouter_model or "qwen/qwen-2.5-vl-72b-instruct:free"
         # Initialize client
         self.client = genai.Client(api_key=self.api_key)
 
@@ -125,15 +137,58 @@ class GeminiService:
             return result
 
         except Exception as e:
+            # 1. Try GitHub Models (recommended for university / lab networks)
+            if getattr(self, "github_token", None):
+                print(
+                    f"[failover] Gemini request failed ({e}). Trying GitHub Models ({self.github_model})...",
+                    file=sys.stderr,
+                )
+                try:
+                    return self._analyze_with_openai_compatible(
+                        url="https://models.inference.ai.azure.com/chat/completions",
+                        api_key=self.github_token,
+                        model=self.github_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="GitHub Models",
+                    )
+                except Exception as gh_err:
+                    print(f"[failover] GitHub Models fallback failed: {gh_err}", file=sys.stderr)
+
+            # 2. Try xAI Grok Vision
             if getattr(self, "grok_api_key", None):
                 print(
-                    f"[failover] Gemini request failed ({e}). Trying Grok Vision fallback...",
+                    f"[failover] Trying Grok Vision fallback ({self.grok_model})...",
                     file=sys.stderr,
                 )
                 try:
                     return self._analyze_with_grok(image_path_obj, prompt, callback)
                 except Exception as grok_err:
-                    print(f"[failover] Grok fallback also failed: {grok_err}", file=sys.stderr)
+                    print(f"[failover] Grok fallback failed: {grok_err}", file=sys.stderr)
+
+            # 3. Try OpenRouter
+            if getattr(self, "openrouter_api_key", None):
+                print(
+                    f"[failover] Trying OpenRouter fallback ({self.openrouter_model})...",
+                    file=sys.stderr,
+                )
+                try:
+                    return self._analyze_with_openai_compatible(
+                        url="https://openrouter.ai/api/v1/chat/completions",
+                        api_key=self.openrouter_api_key,
+                        model=self.openrouter_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="OpenRouter",
+                        extra_headers={
+                            "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
+                            "X-Title": "EasyAnswer",
+                        },
+                    )
+                except Exception as or_err:
+                    print(f"[failover] OpenRouter fallback failed: {or_err}", file=sys.stderr)
 
             if isinstance(e, GeminiServiceError):
                 raise
@@ -153,13 +208,18 @@ class GeminiService:
                 raise GeminiServiceError(f"Network error: {e}")
             raise GeminiServiceError(f"Gemini API error: {e}")
 
-    def _analyze_with_grok(
+    def _analyze_with_openai_compatible(
         self,
+        url: str,
+        api_key: str,
+        model: str,
         image_path: Path,
         prompt: str,
         callback: Optional[Callable[[str], None]] = None,
+        provider_name: str = "Fallback Provider",
+        extra_headers: Optional[dict] = None,
     ) -> str:
-        """Fallback to xAI Grok Vision API if Gemini is blocked or fails."""
+        """Unified fallback to any OpenAI-compatible Vision API (GitHub Models, Grok, OpenRouter, etc.)."""
         import base64
         import json
         import httpx
@@ -172,11 +232,14 @@ class GeminiService:
             b64_data = base64.b64encode(f.read()).decode("utf-8")
 
         headers = {
-            "Authorization": f"Bearer {self.grok_api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        if extra_headers:
+            headers.update(extra_headers)
+
         payload = {
-            "model": self.grok_model,
+            "model": model,
             "messages": [
                 {
                     "role": "user",
@@ -195,13 +258,11 @@ class GeminiService:
         }
 
         full_text = []
-        with httpx.Client(timeout=30.0) as client:
-            with client.stream(
-                "POST", "https://api.x.ai/v1/chat/completions", headers=headers, json=payload
-            ) as response:
+        with httpx.Client(timeout=35.0) as client:
+            with client.stream("POST", url, headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     err_body = response.read().decode("utf-8", errors="replace")
-                    raise GeminiServiceError(f"Grok API error ({response.status_code}): {err_body}")
+                    raise GeminiServiceError(f"{provider_name} API error ({response.status_code}): {err_body}")
 
                 for line in response.iter_lines():
                     if not line:
@@ -225,8 +286,25 @@ class GeminiService:
 
         result = "".join(full_text).strip()
         if not result:
-            raise GeminiServiceError("Empty response from Grok API")
+            raise GeminiServiceError(f"Empty response from {provider_name}")
         return result
+
+    def _analyze_with_grok(
+        self,
+        image_path: Path,
+        prompt: str,
+        callback: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """Backward-compatible helper for Grok fallback."""
+        return self._analyze_with_openai_compatible(
+            url="https://api.x.ai/v1/chat/completions",
+            api_key=self.grok_api_key or "",
+            model=self.grok_model,
+            image_path=image_path,
+            prompt=prompt,
+            callback=callback,
+            provider_name="Grok Vision",
+        )
 
     def analyze_image(self, image_path: str, prompt: Optional[str] = None) -> str:
         """Analyze a screenshot/image using Gemini (or Grok fallback) and return the full text."""
