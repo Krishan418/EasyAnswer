@@ -373,7 +373,7 @@ class ApplicationController:
             if existing:
                 self.notifier.notify(
                     f"Watching {len(existing)} folder(s). "
-                    "New screenshots are uploaded to Gemini.",
+                    "New screenshots are analyzed automatically.",
                     title="Folder monitoring is on",
                 )
             else:

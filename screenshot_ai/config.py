@@ -55,7 +55,7 @@ class Config:
     perplexity_model: str = "sonar"
     groq_api_key: Optional[str] = None
     groq_model: str = "llama-3.2-11b-vision-preview"
-    primary_provider: str = "gemini"
+    primary_provider: str = "openrouter"
     popup_width: int = 260
     popup_height: int = 85
     popup_opacity: float = 0.82
@@ -128,7 +128,7 @@ def get_config() -> Config:
     perplexity_model = os.getenv("PERPLEXITY_MODEL", "sonar").strip() or "sonar"
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
     groq_model = os.getenv("GROQ_MODEL", "llama-3.2-11b-vision-preview").strip() or "llama-3.2-11b-vision-preview"
-    primary_provider = os.getenv("PRIMARY_PROVIDER", "").strip().lower()
+    primary_provider = os.getenv("PRIMARY_PROVIDER", "openrouter").strip().lower()
     if not primary_provider:
         primary_provider = "openrouter" if openrouter_api_key else ("perplexity" if perplexity_api_key else ("groq" if groq_api_key else ("github" if github_token else "gemini")))
 

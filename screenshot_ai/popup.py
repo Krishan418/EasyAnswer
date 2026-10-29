@@ -294,6 +294,22 @@ class ResultPopup(QDialog):
         root.addWidget(self.result_view, 1)
 
     # ---------------------------------------------------------------- state --
+    def _get_provider_display_name(self) -> str:
+        try:
+            from .config import get_config
+            cfg = get_config()
+            mapping = {
+                "openrouter": "OpenRouter",
+                "gemini": "Gemini",
+                "groq": "Groq",
+                "perplexity": "Perplexity",
+                "github": "GitHub Models",
+                "grok": "Grok",
+            }
+            return mapping.get(cfg.primary_provider.lower(), cfg.primary_provider.capitalize() or "OpenRouter")
+        except Exception:
+            return "OpenRouter"
+
     def _reset_view(self) -> None:
         self.result_view.clear()
         self.result_view.setPlaceholderText("Ready. Win+Shift+S -> Ctrl+Shift+S")
@@ -307,10 +323,11 @@ class ResultPopup(QDialog):
         self.analyze_button.setEnabled(not busy)
         self.copy_button.setEnabled(not busy and bool(self._last_result))
         if busy:
+            provider_title = self._get_provider_display_name()
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setVisible(True)
             self.result_view.setHtml(
-                "<p style='color:#6b7280; font-size:9.5px; margin:0;'>⚡ Analyzing&hellip;</p>"
+                f"<p style='color:#6b7280; font-size:9.5px; margin:0;'>⚡ Analyzing with {provider_title}&hellip;</p>"
             )
         else:
             self.progress_bar.setVisible(False)
@@ -370,7 +387,8 @@ class ResultPopup(QDialog):
         self._cleanup_after = cleanup_after
         self.subtitle_label.setText(source_label or _short_filename(file_path))
         self.subtitle_label.setToolTip(file_path)
-        self._set_status("Uploading image to Google Gemini\u2026")
+        provider_title = self._get_provider_display_name()
+        self._set_status(f"Analyzing with {provider_title}\u2026")
         self._set_busy(True)
 
         self._worker = AnalysisWorker(file_path)
