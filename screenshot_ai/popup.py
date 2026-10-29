@@ -47,63 +47,65 @@ def _register_hard_exit() -> None:
 
 POPUP_STYLESHEET = """
 QDialog {
-    background-color: #0f172a;
-    border: 1px solid #334155;
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
     border-radius: 6px;
 }
 QLabel#titleLabel {
-    color: #64748b;
+    color: #9ca3af;
     font-size: 8px;
     font-weight: 600;
 }
 QLabel#subtitleLabel {
-    color: #475569;
+    color: #6b7280;
     font-size: 7.5px;
 }
 QProgressBar#progressBar {
     border: none;
-    background-color: #1e293b;
+    background-color: #f3f4f6;
     height: 1px;
     border-radius: 1px;
 }
 QProgressBar#progressBar::chunk {
-    background-color: #38bdf8;
+    background-color: #6b7280;
     border-radius: 1px;
 }
 QTextBrowser {
-    background-color: #020617;
-    border: 1px solid #1e293b;
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
     border-radius: 4px;
     padding: 3px 5px;
-    color: #f1f5f9;
+    color: #111827;
     font-size: 9.5px;
-    line-height: 1.2;
-    selection-background-color: #334155;
+    line-height: 1.25;
+    selection-background-color: #e5e7eb;
+    selection-color: #111827;
 }
 QPushButton {
-    background-color: #1e293b;
-    border: 1px solid #334155;
+    background-color: #f9fafb;
+    border: 1px solid #d1d5db;
     border-radius: 3px;
     padding: 1px 4px;
-    color: #94a3b8;
+    color: #4b5563;
     font-size: 8px;
     font-weight: 500;
 }
 QPushButton:hover {
-    background-color: #334155;
-    color: #f8fafc;
+    background-color: #f3f4f6;
+    color: #111827;
+    border-color: #9ca3af;
 }
 QPushButton:pressed {
-    background-color: #0f172a;
+    background-color: #e5e7eb;
 }
 QPushButton:disabled {
-    color: #475569;
-    border-color: #1e293b;
+    color: #9ca3af;
+    border-color: #e5e7eb;
 }
 QPushButton#closeButton {
     background-color: transparent;
     border: none;
-    color: #64748b;
+    color: #9ca3af;
     font-size: 11px;
     font-weight: bold;
     padding: 0px;
@@ -114,15 +116,15 @@ QPushButton#closeButton {
     border-radius: 7px;
 }
 QPushButton#closeButton:hover {
-    background-color: #334155;
-    color: #f87171;
+    background-color: #fee2e2;
+    color: #ef4444;
 }
 QLabel#statusLabel {
-    color: #38bdf8;
+    color: #6b7280;
     font-size: 8px;
 }
 QLabel#errorLabel {
-    color: #f87171;
+    color: #dc2626;
     font-size: 8px;
 }
 """
@@ -178,7 +180,7 @@ class ResultPopup(QDialog):
             popup_h = cfg.popup_height
             popup_op = cfg.popup_opacity
         except Exception:
-            popup_w, popup_h, popup_op = 260, 85, 0.88
+            popup_w, popup_h, popup_op = 260, 85, 0.82
 
         self.setWindowTitle("EasyAnswer")
         self.setWindowIcon(build_app_icon())
@@ -308,7 +310,7 @@ class ResultPopup(QDialog):
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setVisible(True)
             self.result_view.setHtml(
-                "<p style='color:#64748b; font-size:9.5px; margin:0;'>⚡ Analyzing&hellip;</p>"
+                "<p style='color:#6b7280; font-size:9.5px; margin:0;'>⚡ Analyzing&hellip;</p>"
             )
         else:
             self.progress_bar.setVisible(False)
