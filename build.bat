@@ -9,6 +9,7 @@ cd /d "%~dp0"
 
 :: Check if virtual environment exists
 if exist ".venv\Scripts\python.exe" (
+    set "PATH=%~dp0.venv\Scripts;%PATH%"
     set "PYTHON_EXE=.venv\Scripts\python.exe"
     set "PYINSTALLER_EXE=.venv\Scripts\pyinstaller.exe"
 ) else (
@@ -23,8 +24,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/3] Running PyInstaller packaging...
-"%PYTHON_EXE%" -m PyInstaller --clean --noconfirm EasyAnswer.spec
+echo [2/3] Running PyInstaller packaging with UPX compression...
+"%PYTHON_EXE%" -m PyInstaller --clean --noconfirm --upx-dir=".venv\Scripts" EasyAnswer.spec
 if errorlevel 1 (
     echo [ERROR] PyInstaller build failed!
     exit /b 1
