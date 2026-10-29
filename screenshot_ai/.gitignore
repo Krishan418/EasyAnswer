@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# Secrets - never commit this file
+.env
+.env.local
+
+# Build output
+build/
+dist/
+*.spec
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
