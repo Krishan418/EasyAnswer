@@ -71,7 +71,7 @@ class Config:
     glm_api_key: Optional[str] = None
     glm_model: str = "glm-4.6v"
     enable_ovh: bool = True
-    primary_provider: str = "openrouter"
+    primary_provider: str = "cloudflare"
     popup_width: int = 260
     popup_height: int = 85
     popup_opacity: float = 0.70
@@ -155,9 +155,9 @@ def get_config() -> Config:
     glm_api_key = os.getenv("GLM_API_KEY", "").strip() or None
     glm_model = os.getenv("GLM_MODEL", "glm-4.6v").strip() or "glm-4.6v"
     enable_ovh = _env_bool("ENABLE_OVH", True)
-    primary_provider = os.getenv("PRIMARY_PROVIDER", "openrouter").strip().lower()
+    primary_provider = os.getenv("PRIMARY_PROVIDER", "cloudflare").strip().lower()
     if not primary_provider:
-        primary_provider = "openrouter" if openrouter_api_key else ("cloudflare" if cloudflare_api_token else "gemini")
+        primary_provider = "cloudflare" if (cloudflare_api_token and cloudflare_account_id) else ("openrouter" if openrouter_api_key else "gemini")
 
     return Config(
         gemini_api_key=api_key,
