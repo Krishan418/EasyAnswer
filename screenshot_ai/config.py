@@ -69,7 +69,7 @@ class Config:
     huggingface_api_token: Optional[str] = None
     huggingface_model: str = "meta-llama/Llama-3.2-11B-Vision-Instruct"
     glm_api_key: Optional[str] = None
-    glm_model: str = "glm-4v-flash"
+    glm_model: str = "glm-4.6v"
     enable_ovh: bool = True
     primary_provider: str = "openrouter"
     popup_width: int = 260
@@ -153,7 +153,7 @@ def get_config() -> Config:
     huggingface_api_token = os.getenv("HUGGINGFACE_API_TOKEN", "").strip() or None
     huggingface_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.2-11B-Vision-Instruct").strip() or "meta-llama/Llama-3.2-11B-Vision-Instruct"
     glm_api_key = os.getenv("GLM_API_KEY", "").strip() or None
-    glm_model = os.getenv("GLM_MODEL", "glm-4v-flash").strip() or "glm-4v-flash"
+    glm_model = os.getenv("GLM_MODEL", "glm-4.6v").strip() or "glm-4.6v"
     enable_ovh = _env_bool("ENABLE_OVH", True)
     primary_provider = os.getenv("PRIMARY_PROVIDER", "openrouter").strip().lower()
     if not primary_provider:
