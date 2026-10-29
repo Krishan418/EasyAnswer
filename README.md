@@ -1,219 +1,159 @@
-# EasyAnswer (Screenshot AI Assistant)
+# EasyAnswer (Stealth Screenshot AI Assistant)
 
-A lightweight, high-performance Windows desktop application that instantly captures and analyzes screenshots using **Google Gemini Vision** and displays explanations, step-by-step reasoning, and solutions in a sleek, non-intrusive floating popup.
+A lightweight, ultra-discreet Windows desktop application designed to instantly capture and solve screenshots, code, diagrams, and MCQs using a **multi-provider vision AI failover chain** (OpenRouter, Cloudflare Workers AI, Google Gemini, and more) wrapped in a **frosted translucent, frameless stealth popup**.
 
----
-
-## ✨ Features
-
-- **Gemini Vision Powered**: Sends screenshots directly to Google Gemini for accurate visual reasoning, diagram comprehension, code analysis, and MCQ solving.
-- **Windows Snipping Tool Integration**:
-  - `Win+Shift+S` &rarr; copy snip &rarr; press hotkey (`Ctrl+Shift+S`): automatically analyzes the clipboard image.
-  - System Tray &rarr; **Analyze clipboard image** analyzes on demand.
-  - Optional auto-watch for folders the Windows Snipping Tool saves into (`Pictures\Screenshots`, `OneDrive`, `Desktop`).
-- **Global Shortcut (No Third-Party Hooks)**: Native Win32 `RegisterHotKey` implementation for instant activation even when another window is focused.
-- **Non-blocking UI**: Analysis requests execute on background worker threads (`QThread`), keeping the UI responsive with real-time feedback.
-- **Smart Duplicate Prevention**: SHA-256 image hashing avoids re-uploading duplicate screenshots, preserving API quota.
-- **Privacy & Security**:
-  - Clipboard images are saved to a temporary file, analyzed, and deleted immediately.
-  - Opt-in folder monitoring (off by default).
-  - API keys are loaded via `.env` and never bundled or committed.
-- **System Tray Controls**:
-  - Run at Windows login (per-user registry, no administrator privileges required).
-  - Pause/Resume automatic uploads.
-  - Quick file picker and window toggle.
-- **Pure Code Assets**: App icons are procedurally drawn via `QPainter` in memory—no extra binary image files required.
+Built specifically for high-stakes lab, exam, and restricted academic network environments where popular AI services (ChatGPT, Gemini, Grok) are firewalled.
 
 ---
 
-## 📁 Project Layout
+## ✨ Key Capabilities
 
-```
-EasyAnswer/
-├── screenshot_ai/               # Core application package
-│   ├── app.py                   # Main controller (tray, hotkey, watcher, single-instance)
-│   ├── config.py                # Environment configuration loader (.env)
-│   ├── gemini_service.py        # Gemini client wrapper, prompt tuning, and error mapping
-│   ├── screenshot_service.py    # Image validation, hashing, clipboard reader, folder watcher
-│   ├── popup.py                 # PySide6 popup dialog & background QThread worker
-│   ├── hotkey.py                # Win32 RegisterHotKey global shortcut implementation
-│   ├── notifications.py         # System tray icon and native Windows notifications
-│   ├── startup.py               # Windows registry (HKCU Run) startup manager
-│   ├── icons.py                 # Procedural icon generator
-│   ├── requirements.txt         # Package dependencies
-│   └── .env.example             # Template for configuration settings
-├── tests/                       # Automated test suite (unittest / pytest)
-│   ├── test_config.py           # Configuration parsing & validation tests
-│   ├── test_hotkey.py           # Hotkey parsing & keycode tests
-│   ├── test_screenshot_service.py # Image validation, SHA-256 deduplication, cleanup tests
-│   └── test_gemini_service.py   # Gemini API client, response parsing & error mapping tests
-├── tools/                       # Diagnostic and helper tools
-│   ├── check_gemini.py          # Synthetic MCQ test to verify Gemini API connection
-│   ├── check_snipping_tool.py   # Verifies clipboard image capture and folder watching
-│   └── list_models.py           # Lists Gemini models supported by your API key
-├── test_gemini.py               # CLI tool to analyze an image file directly
-├── test_screenshot.py           # CLI tool to test image hashing and validation
-└── README.md                    # Project documentation
-```
+- 👻 **Ultimate Ghost Mode (`AUTO_SHOW_POPUP=false`)**:
+  - Pressing `Ctrl + Shift + S` analyzes the clipboard snip **100% silently in the background**.
+  - **Zero unprompted popups** appear on screen during analysis—nobody walking past will notice any window or loading animation.
+  - Press **`Ctrl + ~`** (or your custom toggle key) whenever it is safe to peek at the answer, and press it again or `Esc` to instantly vanish.
+- 🛡️ **Multi-Provider AI Resilience & Auto-Failover**:
+  - **Primary: OpenRouter (`nvidia/nemotron-3.5-super-vl:free`)** &mdash; 100% free vision, ~2s response time, unblocked on campus/lab firewalls.
+  - **Failover 1: OpenRouter Dynamic Pool (`openrouter/free`)** &mdash; Automatically routes to active free models if the primary model is busy or rate-limited.
+  - **Failover 2: Cloudflare Workers AI (`@cf/meta/llama-3.2-11b-vision-instruct`)** &mdash; 10,000 requests/day completely free; Cloudflare global CDN domains are never blocked on university networks.
+  - **Failover 3: Mistral AI (`pixtral-12b-2409`)** &mdash; High-accuracy academic vision model.
+  - **Failover 4: Hugging Face Serverless Vision** &mdash; Free open-source inference token.
+  - **Failover 5: Google Gemini (`gemini-3.5-flash`)** &mdash; Built-in backup (ideal via mobile hotspot / USB tethering).
+  - Also supports Groq Cloud, Perplexity AI, GitHub Models, and xAI Grok.
+- 🪟 **Frosted Translucent Stealth UI**:
+  - Ultra-compact **`260 × 85 px`** frameless design.
+  - Soft, see-through frosted white translucency (**`POPUP_OPACITY=0.82`**) with crisp dark charcoal text (`#111827`) that is readable yet inconspicuous from an angle.
+  - **Click-and-drag anywhere** on the popup to reposition it effortlessly.
+  - Minimalistic: no bulky titlebars or unnecessary buttons.
+- ⚡ **Windows Snipping Tool Integration**:
+  - `Win + Shift + S` &rarr; snip question &rarr; `Ctrl + Shift + S` &rarr; background analysis.
+- 🚨 **Emergency Panic Quit (`Ctrl + Shift + Q`)**:
+  - Instantly kills the application and background processes without leaving traces.
+- ⏳ **Auto-Exit Safety Timer**:
+  - Automatically terminates after 15 minutes of inactivity (`AUTO_EXIT_MINUTES=15`).
+- 🔒 **Privacy & Security**:
+  - Tray icon hidden by default (`SHOW_TRAY_ICON=false`).
+  - Temporary snip files are wiped immediately after analysis.
+  - SHA-256 deduplication avoids duplicate API calls.
+  - No Python runtime required on target machines when using `dist/EasyAnswer.exe`.
 
 ---
 
-## 🚀 Quick Start
+## ⌨️ Global Shortcuts
 
-### 1. Prerequisites
-- Python 3.10+ (Python 3.11 or 3.12 recommended) on Windows.
-- A free Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
+| Shortcut | Action | Description |
+|---|---|---|
+| **`Win + Shift + S`** | **Snip Question** | Standard Windows Snipping Tool shortcut to select any area of your screen. |
+| **`Ctrl + Shift + S`** | **Silent AI Capture** | Silently reads the clipboard snip and initiates background AI analysis. *(No popup shown).* |
+| **`Ctrl + ~`** | **Toggle Reveal / Hide** | Shows the translucent popup with the ready answer. Press again or `Esc` to instantly hide. |
+| **`Ctrl + Shift + Q`** | **Emergency Panic Quit** | Instantly closes and exits the entire application. |
+| **`Esc`** | **Quick Hide** | Hides the popup immediately when it is visible. |
 
-### 2. Installation
+> **Note on `Ctrl + ~`:** On standard keyboards, the `~` (tilde) key is the backtick key located directly above `Tab` and to the left of `1`.
 
-Clone the repository and set up a virtual environment:
+---
 
+## 🚀 Portable Executable (`.exe`) Quick Start
+
+EasyAnswer comes pre-compiled as a standalone Windows executable. You do **not** need Python installed.
+
+1. Navigate to the `dist\` folder:
+   ```
+   EasyAnswer/
+   └── dist/
+       ├── EasyAnswer.exe    <-- Standalone executable
+       └── .env              <-- Configuration & API keys
+   ```
+2. Ensure your `.env` file exists next to `EasyAnswer.exe` with your preferred provider:
+   ```env
+   PRIMARY_PROVIDER=openrouter
+   OPENROUTER_API_KEY=your_openrouter_key_here
+   OPENROUTER_MODEL=nvidia/nemotron-3.5-super-vl:free
+
+   AUTO_SHOW_POPUP=false
+   SHOW_TRAY_ICON=false
+   POPUP_OPACITY=0.82
+   ```
+3. Double-click `EasyAnswer.exe`. The app starts silently in the background.
+4. Press `Win + Shift + S` &rarr; Snip &rarr; `Ctrl + Shift + S` &rarr; wait 2s &rarr; `Ctrl + ~` to view the answer!
+
+---
+
+## 🛠️ Building from Source
+
+### Prerequisites
+- Windows 10 or 11
+- Python 3.10+ (Python 3.11 / 3.12 recommended)
+
+### Setup & Run
 ```powershell
-# Navigate to the project directory
-cd "d:\Education Works\GitHub Works\EasyAnswer"
+# 1. Clone repository
+git clone https://github.com/Krishan418/EasyAnswer.git
+cd EasyAnswer
 
-# Create and activate virtual environment
+# 2. Set up virtual environment
 python -m venv .venv
 .venv\Scripts\activate
 
-# Install dependencies
+# 3. Install dependencies
 pip install -r screenshot_ai\requirements.txt
-```
 
-### 3. Configure `.env`
-
-Copy the template configuration file:
-
-```powershell
+# 4. Copy configuration template
 copy screenshot_ai\.env.example .env
-```
 
-Open `.env` and insert your Gemini API key:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.5-flash
-HOTKEY=ctrl+shift+s
-```
-
-> **Tip:** You can run `python tools\list_models.py` at any time to list all active models supported by your API key.
-
-### 4. Run the Application
-
-```powershell
+# 5. Run the application
 python -m screenshot_ai.app
 ```
 
-The application will start, open the floating popup, and register itself in the Windows System Tray.
+### Build Single-File `.exe`
+To compile the standalone portable binary yourself:
+```powershell
+cmd /c build.bat
+```
+The resulting binary will be created at `dist\EasyAnswer.exe`.
 
 ---
 
-## ⌨️ How to Use & Shortcuts
+## ⚙️ Configuration Reference (`.env`)
 
-| Shortcut / Action | Function | Description |
+All parameters can be configured in `.env` (in the project root during development, or next to `EasyAnswer.exe` in production):
+
+| Setting | Default | Description |
 |---|---|---|
-| **`Win + Shift + S` &rarr; `Ctrl + Shift + S`** | **Analyze Screenshot** | Snip area with Windows Snipping Tool, then press `Ctrl+Shift+S` to analyze directly from clipboard. |
-| **`Ctrl + ~`** | **Toggle Window** | Show or hide the answer window instantly without needing to click or select the app. |
-| **`Ctrl + Shift + Q`** | **Emergency Panic Quit** | Instantly closes and kills the application cleanly. |
-| **Manual Selection** | **File Picker** | Click **Analyze another…** in the popup to choose any local image file. |
+| `PRIMARY_PROVIDER` | `openrouter` | Primary AI engine (`openrouter`, `cloudflare`, `mistral`, `gemini`, `groq`, `perplexity`, `github`, `grok`) |
+| `AUTO_SHOW_POPUP` | `false` | When `false` (Ghost Mode), analysis runs silently in the background; press `Ctrl + ~` to view |
+| `HOTKEY` | `ctrl+shift+s` | Shortcut to trigger clipboard capture and AI analysis |
+| `TOGGLE_HOTKEY` | `ctrl+~` | Shortcut to toggle answer window visibility |
+| `QUIT_HOTKEY` | `ctrl+shift+q` | Emergency instant exit shortcut |
+| `POPUP_WIDTH` | `260` | Popup width in pixels (minimum 180) |
+| `POPUP_HEIGHT` | `85` | Popup height in pixels (minimum 50) |
+| `POPUP_OPACITY` | `0.82` | Window opacity (`0.20` to `1.00`). Lower values are more transparent |
+| `SHOW_TRAY_ICON` | `false` | Hide system tray icon for maximum stealth |
+| `ENABLE_NOTIFICATIONS` | `false` | Suppress all Windows notification toast alerts |
+| `AUTO_EXIT_MINUTES` | `15` | Minutes of inactivity before auto-closing (0 to disable) |
+| `CLIPBOARD_ON_HOTKEY` | `true` | Automatically grab images from the clipboard on hotkey |
+| `OPENROUTER_API_KEY` | *(Configured)* | OpenRouter API Key for free vision models |
+| `OPENROUTER_MODEL` | `nvidia/nemotron-3.5-super-vl:free` | Primary OpenRouter vision model |
+| `CLOUDFLARE_ACCOUNT_ID` | *(Optional)* | Cloudflare Account ID for Workers AI |
+| `CLOUDFLARE_API_TOKEN` | *(Optional)* | Cloudflare Workers AI API Token (10k free requests/day) |
+| `CLOUDFLARE_MODEL` | `@cf/meta/llama-3.2-11b-vision-instruct` | Cloudflare vision model |
+| `GEMINI_API_KEY` | *(Configured)* | Google AI Studio Gemini API key |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Google Gemini model identifier |
+| `MISTRAL_API_KEY` | *(Optional)* | Mistral AI API key (`pixtral-12b-2409`) |
+| `HUGGINGFACE_API_TOKEN`| *(Optional)* | Hugging Face user token for serverless vision |
 
 ---
 
-## ⚙️ Configuration Reference
+## 🧪 Testing
 
-| Environment Variable | Default | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | *(Required)* | Google AI Studio API key |
-| `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini vision model identifier (e.g. `gemini-3.5-flash`, `gemini-2.5-flash`) |
-| `HOTKEY` | `ctrl+shift+s` | Global screenshot analysis shortcut |
-| `TOGGLE_HOTKEY` | `ctrl+~` | Global shortcut to toggle popup visibility |
-| `QUIT_HOTKEY` | `ctrl+shift+q` | Global emergency exit shortcut |
-| `SHOW_TRAY_ICON` | `false` | Stealth mode: hide icon from Windows system tray |
-| `AUTO_EXIT_MINUTES` | `15` | Minutes of inactivity before automatically closing (0 to disable) |
-| `ENABLE_NOTIFICATIONS` | `true` | Show native Windows notification when analysis completes (suppressed in stealth mode) |
-| `NOTIFICATION_DURATION_MS` | `4000` | Toast notification duration in milliseconds |
-| `CLIPBOARD_ON_HOTKEY` | `true` | Analyze clipboard snip on hotkey press if an image is present |
-| `WATCH_COMMON_FOLDERS` | `false` | Automatically monitor `Pictures\Screenshots`, `OneDrive`, and `Desktop` |
-| `GROK_API_KEY` | *(Optional)* | xAI Grok API key for automatic vision fallback if Gemini is blocked |
-| `GROK_MODEL` | `grok-2-vision-1212` | Model identifier used for Grok Vision fallback |
-| `GITHUB_TOKEN` | *(Optional)* | GitHub Personal Access Token for GitHub Models (GPT-4o-mini vision fallback) |
-| `GITHUB_MODEL` | `gpt-4o-mini` | Model identifier for GitHub Models fallback |
-| `OPENROUTER_API_KEY` | *(Optional)* | OpenRouter API key for multi-model vision fallback |
-| `OPENROUTER_MODEL` | `qwen/qwen-2.5-vl-72b-instruct:free` | Model identifier for OpenRouter fallback |
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated unit test suite:
+Run the automated test suite (30 unit tests covering all services, configurations, hotkey parsing, and failover routing):
 
 ```powershell
-python -m unittest discover -s tests -v
-```
-
-Run manual end-to-end integration checks:
-
-```powershell
-# Verify Gemini API connectivity (generates and analyzes a test MCQ)
-python tools\check_gemini.py
-
-# Verify Windows Snipping Tool clipboard extraction & folder watching
-python tools\check_snipping_tool.py
-
-# List active Gemini models for your API key
-python tools\list_models.py
+.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 ---
 
-## 📦 Building Standalone Executable (.exe)
+## ⚖️ License & Ethical Use
 
-You can compile EasyAnswer into a standalone Windows `.exe` application that runs without requiring Python to be installed.
-
-Run the one-click build script:
-
-```powershell
-.\build.bat
-```
-
-Once the build finishes, your executable will be located in the `dist/` directory:
-```
-dist/
-├── EasyAnswer.exe     # Standalone application
-└── .env.example       # Example configuration file
-```
-
-> **Running the .exe:** Place your `.env` file containing your `GEMINI_API_KEY` in the same directory as `EasyAnswer.exe` (or set the system environment variable `GEMINI_API_KEY`), then double-click `EasyAnswer.exe` to run!
-
----
-
-## 🗺️ Development Roadmap
-
-- [x] **Phase 1: Foundation & Stability**
-  - [x] Win32 global hotkeys & system tray integration.
-  - [x] Multimodal Gemini Vision client with error categorization (404, 429, auth).
-  - [x] Non-blocking `QThread` UI with Markdown rendering.
-  - [x] SHA-256 duplicate image detection & temp file cleanup.
-  - [x] Automated unit test suite (`tests/`).
-- [ ] **Phase 2: Enhanced User Experience & Stealth**
-  - [x] Global window toggle (`Ctrl+~`) & emergency killswitch (`Ctrl+Shift+Q`).
-  - [x] Stealth mode (hidden tray icon) & 15-minute inactivity auto-exit timer.
-  - [x] Automatic Grok-2 Vision streaming fallback when Gemini is blocked or fails.
-  - [ ] Built-in screen region selection overlay (direct click-and-drag snip on hotkey).
-  - [ ] Mini follow-up chat input inside the popup to ask clarifying questions.
-  - [ ] Presets/Task modes (MCQ Solver, Code Explainer, Translator/Summarizer).
-- [ ] **Phase 3: Visuals & History**
-  - [ ] Local history drawer / SQLite storage for past screenshots and solutions.
-  - [ ] Syntax-highlighted code blocks and LaTeX math equation rendering.
-  - [ ] Dark / Light theme toggle.
-- [ ] **Phase 4: Distribution & Packaging**
-  - [x] One-click PyInstaller standalone `.exe` build script (`build.bat`).
-  - [x] Windows custom icon packaging (`app.ico` generation).
-  - [ ] Windows installer with automated desktop & startup shortcuts.
-
-
----
-
-## 📄 License
-
-MIT License. Feel free to use, modify, and distribute.
+This project is licensed under the MIT License. Developed strictly for educational assistance, accessibility, and productivity. Users are responsible for complying with the policies and codes of conduct of their respective institutions or examination bodies.
