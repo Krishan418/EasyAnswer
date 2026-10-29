@@ -135,6 +135,26 @@ class TestGeminiService(unittest.TestCase):
             self.assertEqual(kwargs.get("provider_name"), "GitHub Models")
             self.assertEqual(kwargs.get("model"), "gpt-4o-mini")
 
+    @mock.patch("google.genai.Client")
+    def test_github_models_as_primary_provider(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            api_key="dummy_key",
+            github_token="ghp_test_token",
+            primary_provider="github",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option C** (Direct GitHub)") as mock_gh:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option C** (Direct GitHub)")
+            mock_gh.assert_called_once()
+            # Gemini stream should NOT have been called because GitHub succeeded as primary!
+            mock_client.models.generate_content_stream.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

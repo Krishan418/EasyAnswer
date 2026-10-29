@@ -29,6 +29,7 @@ class GeminiService:
         github_model: Optional[str] = None,
         openrouter_api_key: Optional[str] = None,
         openrouter_model: Optional[str] = None,
+        primary_provider: Optional[str] = None,
     ):
         if api_key is None:
             try:
@@ -43,6 +44,7 @@ class GeminiService:
             self.github_model = github_model or config.github_model
             self.openrouter_api_key = openrouter_api_key or config.openrouter_api_key
             self.openrouter_model = openrouter_model or config.openrouter_model
+            self.primary_provider = primary_provider or config.primary_provider
         else:
             self.api_key = api_key
             self.model = model or "gemini-3.5-flash"
@@ -52,6 +54,7 @@ class GeminiService:
             self.github_model = github_model or "gpt-4o-mini"
             self.openrouter_api_key = openrouter_api_key
             self.openrouter_model = openrouter_model or "qwen/qwen-2.5-vl-72b-instruct:free"
+            self.primary_provider = primary_provider or ("github" if github_token else "gemini")
         # Initialize client
         self.client = genai.Client(api_key=self.api_key)
 
@@ -94,58 +97,32 @@ class GeminiService:
                 "Keep the entire response compact, short, and to the point without filler or large headers."
             )
 
-        try:
-            # Load image and ensure underlying file handle is closed
-            with Image.open(image_path_obj) as img:
-                img.load()
-                image = img.copy()
-            contents = [prompt, image]
+        # Determine execution order based on primary_provider
+        provider_order = []
+        if self.primary_provider == "github" and self.github_token:
+            provider_order.append("github")
+            provider_order.append("gemini")
+        elif self.primary_provider == "openrouter" and self.openrouter_api_key:
+            provider_order.append("openrouter")
+            if self.github_token:
+                provider_order.append("github")
+            provider_order.append("gemini")
+        else:
+            provider_order.append("gemini")
+            if self.github_token:
+                provider_order.append("github")
 
-            full_text = []
+        if self.openrouter_api_key and "openrouter" not in provider_order:
+            provider_order.append("openrouter")
+        if self.grok_api_key and "grok" not in provider_order:
+            provider_order.append("grok")
+
+        errors = []
+        for provider in provider_order:
             try:
-                # Fast real-time stream
-                stream = self.client.models.generate_content_stream(
-                    model=self.model,
-                    contents=contents,
-                )
-                for chunk in stream:
-                    text = getattr(chunk, "text", None)
-                    if text:
-                        full_text.append(text)
-                        if callback:
-                            callback(text)
-            except Exception as stream_err:
-                err_str = str(stream_err).lower()
-                if any(k in err_str for k in ("404", "not found", "quota", "rate", "429", "api key", "unauthorized", "permission", "network", "timeout", "connection")):
-                    raise
-
-                # Fallback to non-streaming only for stream protocol issues
-                if not full_text:
-                    response = self.client.models.generate_content(
-                        model=self.model,
-                        contents=contents,
-                    )
-                    text = getattr(response, "text", None) or ""
-                    if text:
-                        full_text.append(text)
-                        if callback:
-                            callback(text)
-
-            result = "".join(full_text).strip()
-            if not result:
-                raise GeminiServiceError("Empty response from Gemini API")
-            return result
-
-        except Exception as e:
-            # 1. Try GitHub Models (recommended for university / lab networks)
-            if getattr(self, "github_token", None):
-                print(
-                    f"[failover] Gemini request failed ({e}). Trying GitHub Models ({self.github_model})...",
-                    file=sys.stderr,
-                )
-                try:
+                if provider == "github":
                     return self._analyze_with_openai_compatible(
-                        url="https://models.inference.ai.azure.com/chat/completions",
+                        url="https://models.github.ai/inference/chat/completions",
                         api_key=self.github_token,
                         model=self.github_model,
                         image_path=image_path_obj,
@@ -153,27 +130,9 @@ class GeminiService:
                         callback=callback,
                         provider_name="GitHub Models",
                     )
-                except Exception as gh_err:
-                    print(f"[failover] GitHub Models fallback failed: {gh_err}", file=sys.stderr)
-
-            # 2. Try xAI Grok Vision
-            if getattr(self, "grok_api_key", None):
-                print(
-                    f"[failover] Trying Grok Vision fallback ({self.grok_model})...",
-                    file=sys.stderr,
-                )
-                try:
-                    return self._analyze_with_grok(image_path_obj, prompt, callback)
-                except Exception as grok_err:
-                    print(f"[failover] Grok fallback failed: {grok_err}", file=sys.stderr)
-
-            # 3. Try OpenRouter
-            if getattr(self, "openrouter_api_key", None):
-                print(
-                    f"[failover] Trying OpenRouter fallback ({self.openrouter_model})...",
-                    file=sys.stderr,
-                )
-                try:
+                elif provider == "gemini":
+                    return self._analyze_with_gemini(image_path_obj, prompt, callback)
+                elif provider == "openrouter":
                     return self._analyze_with_openai_compatible(
                         url="https://openrouter.ai/api/v1/chat/completions",
                         api_key=self.openrouter_api_key,
@@ -187,26 +146,71 @@ class GeminiService:
                             "X-Title": "EasyAnswer",
                         },
                     )
-                except Exception as or_err:
-                    print(f"[failover] OpenRouter fallback failed: {or_err}", file=sys.stderr)
+                elif provider == "grok":
+                    return self._analyze_with_grok(image_path_obj, prompt, callback)
+            except Exception as exc:
+                errors.append(f"{provider}: {exc}")
+                print(f"[failover] {provider} failed ({exc}). Trying next provider...", file=sys.stderr)
 
-            if isinstance(e, GeminiServiceError):
+        # Map common errors if all failed
+        last_err = errors[-1] if errors else "No AI provider available."
+        err_str = last_err.lower()
+        if "api key" in err_str or "unauthorized" in err_str or "permission" in err_str:
+            raise GeminiServiceError(f"Authentication error: {last_err}")
+        if "rate" in err_str or "quota" in err_str or "429" in err_str:
+            raise GeminiServiceError(f"Rate limit or quota exceeded: {last_err}")
+        if "404" in err_str or "not found" in err_str:
+            raise GeminiServiceError(
+                f"Model '{self.model}' not found (404). Run 'python tools/list_models.py' "
+                f"to see models supported by your API key and update GEMINI_MODEL in .env: {last_err}"
+            )
+        if "network" in err_str or "timeout" in err_str or "connection" in err_str:
+            raise GeminiServiceError(f"Network error: {last_err}")
+        raise GeminiServiceError(f"All AI providers failed: {last_err}")
+
+    def _analyze_with_gemini(
+        self,
+        image_path_obj: Path,
+        prompt: str,
+        callback: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        with Image.open(image_path_obj) as img:
+            img.load()
+            image = img.copy()
+        contents = [prompt, image]
+
+        full_text = []
+        try:
+            stream = self.client.models.generate_content_stream(
+                model=self.model,
+                contents=contents,
+            )
+            for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if text:
+                    full_text.append(text)
+                    if callback:
+                        callback(text)
+        except Exception as stream_err:
+            err_str = str(stream_err).lower()
+            if any(k in err_str for k in ("404", "not found", "quota", "rate", "429", "api key", "unauthorized", "permission", "network", "timeout", "connection")):
                 raise
 
-            # Map common errors
-            err_str = str(e).lower()
-            if "api key" in err_str or "unauthorized" in err_str or "permission" in err_str:
-                raise GeminiServiceError(f"Authentication error: {e}")
-            if "rate" in err_str or "quota" in err_str or "429" in err_str:
-                raise GeminiServiceError(f"Rate limit or quota exceeded: {e}")
-            if "404" in err_str or "not found" in err_str:
-                raise GeminiServiceError(
-                    f"Model '{self.model}' not found (404). Run 'python tools/list_models.py' "
-                    f"to see models supported by your API key and update GEMINI_MODEL in .env: {e}"
+            if not full_text:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
                 )
-            if "network" in err_str or "timeout" in err_str or "connection" in err_str:
-                raise GeminiServiceError(f"Network error: {e}")
-            raise GeminiServiceError(f"Gemini API error: {e}")
+                text = getattr(response, "text", None) or ""
+                if text:
+                    full_text.append(text)
+                    if callback:
+                        callback(text)
+
+        result = "".join(full_text).strip()
+        if not result:
+            raise GeminiServiceError("Empty response from Gemini API")
+        return result
 
     def _analyze_with_openai_compatible(
         self,

@@ -50,7 +50,8 @@ class Config:
     github_token: Optional[str] = None
     github_model: str = "gpt-4o-mini"
     openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "qwen/qwen-2.5-vl-72b-instruct:free"
+    openrouter_model: str = "nvidia/nemotron-3.5-super-vl:free"
+    primary_provider: str = "gemini"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -105,7 +106,10 @@ def get_config() -> Config:
     github_token = os.getenv("GITHUB_TOKEN", "").strip() or None
     github_model = os.getenv("GITHUB_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip() or None
-    openrouter_model = os.getenv("OPENROUTER_MODEL", "qwen/qwen-2.5-vl-72b-instruct:free").strip() or "qwen/qwen-2.5-vl-72b-instruct:free"
+    openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip() or "nvidia/nemotron-3.5-super-vl:free"
+    primary_provider = os.getenv("PRIMARY_PROVIDER", "").strip().lower()
+    if not primary_provider:
+        primary_provider = "github" if github_token else "gemini"
 
     return Config(
         gemini_api_key=api_key,
@@ -127,6 +131,7 @@ def get_config() -> Config:
         github_model=github_model,
         openrouter_api_key=openrouter_api_key,
         openrouter_model=openrouter_model,
+        primary_provider=primary_provider,
     )
 
 
