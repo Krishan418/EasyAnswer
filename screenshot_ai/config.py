@@ -56,6 +56,7 @@ class Config:
     github_model: str = "gpt-4o-mini"
     openrouter_api_key: Optional[str] = None
     openrouter_model: str = "nvidia/nemotron-3.5-super-vl:free"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
     perplexity_api_key: Optional[str] = None
     perplexity_model: str = "sonar"
     groq_api_key: Optional[str] = None
@@ -67,6 +68,9 @@ class Config:
     cloudflare_model: str = "@cf/meta/llama-3.2-11b-vision-instruct"
     huggingface_api_token: Optional[str] = None
     huggingface_model: str = "meta-llama/Llama-3.2-11B-Vision-Instruct"
+    glm_api_key: Optional[str] = None
+    glm_model: str = "glm-4v-flash"
+    enable_ovh: bool = True
     primary_provider: str = "openrouter"
     popup_width: int = 260
     popup_height: int = 85
@@ -136,6 +140,7 @@ def get_config() -> Config:
     github_model = os.getenv("GITHUB_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip() or None
     openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip() or "nvidia/nemotron-3.5-super-vl:free"
+    openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip() or "https://openrouter.ai/api/v1"
     perplexity_api_key = os.getenv("PERPLEXITY_API_KEY", "").strip() or None
     perplexity_model = os.getenv("PERPLEXITY_MODEL", "sonar").strip() or "sonar"
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
@@ -147,9 +152,12 @@ def get_config() -> Config:
     cloudflare_model = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.2-11b-vision-instruct").strip() or "@cf/meta/llama-3.2-11b-vision-instruct"
     huggingface_api_token = os.getenv("HUGGINGFACE_API_TOKEN", "").strip() or None
     huggingface_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.2-11B-Vision-Instruct").strip() or "meta-llama/Llama-3.2-11B-Vision-Instruct"
+    glm_api_key = os.getenv("GLM_API_KEY", "").strip() or None
+    glm_model = os.getenv("GLM_MODEL", "glm-4v-flash").strip() or "glm-4v-flash"
+    enable_ovh = _env_bool("ENABLE_OVH", True)
     primary_provider = os.getenv("PRIMARY_PROVIDER", "openrouter").strip().lower()
     if not primary_provider:
-        primary_provider = "openrouter" if openrouter_api_key else ("mistral" if mistral_api_key else ("cloudflare" if cloudflare_api_token else ("perplexity" if perplexity_api_key else ("groq" if groq_api_key else ("github" if github_token else "gemini")))))
+        primary_provider = "openrouter" if openrouter_api_key else ("cloudflare" if cloudflare_api_token else "gemini")
 
     return Config(
         gemini_api_key=api_key,
@@ -171,6 +179,7 @@ def get_config() -> Config:
         github_model=github_model,
         openrouter_api_key=openrouter_api_key,
         openrouter_model=openrouter_model,
+        openrouter_base_url=openrouter_base_url,
         perplexity_api_key=perplexity_api_key,
         perplexity_model=perplexity_model,
         groq_api_key=groq_api_key,
@@ -182,6 +191,9 @@ def get_config() -> Config:
         cloudflare_model=cloudflare_model,
         huggingface_api_token=huggingface_api_token,
         huggingface_model=huggingface_model,
+        glm_api_key=glm_api_key,
+        glm_model=glm_model,
+        enable_ovh=enable_ovh,
         primary_provider=primary_provider,
         popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
         popup_height=max(50, _env_int("POPUP_HEIGHT", 85)),

@@ -323,6 +323,8 @@ class ResultPopup(QDialog):
                 "mistral": "Mistral AI",
                 "cloudflare": "Cloudflare AI",
                 "huggingface": "Hugging Face",
+                "ovh": "OVHcloud Kepler",
+                "glm": "Zhipu GLM-4V",
                 "gemini": "Gemini",
                 "groq": "Groq",
                 "perplexity": "Perplexity",

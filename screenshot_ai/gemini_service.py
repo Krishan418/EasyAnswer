@@ -30,6 +30,7 @@ class GeminiService:
         github_model: Optional[str] = None,
         openrouter_api_key: Optional[str] = None,
         openrouter_model: Optional[str] = None,
+        openrouter_base_url: Optional[str] = None,
         perplexity_api_key: Optional[str] = None,
         perplexity_model: Optional[str] = None,
         groq_api_key: Optional[str] = None,
@@ -41,6 +42,9 @@ class GeminiService:
         cloudflare_model: Optional[str] = None,
         huggingface_api_token: Optional[str] = None,
         huggingface_model: Optional[str] = None,
+        glm_api_key: Optional[str] = None,
+        glm_model: Optional[str] = None,
+        enable_ovh: Optional[bool] = None,
         primary_provider: Optional[str] = None,
     ):
         if api_key is None:
@@ -56,6 +60,7 @@ class GeminiService:
             self.github_model = github_model or config.github_model
             self.openrouter_api_key = openrouter_api_key or config.openrouter_api_key
             self.openrouter_model = openrouter_model or config.openrouter_model
+            self.openrouter_base_url = openrouter_base_url or getattr(config, "openrouter_base_url", "https://openrouter.ai/api/v1")
             self.perplexity_api_key = perplexity_api_key or config.perplexity_api_key
             self.perplexity_model = perplexity_model or config.perplexity_model
             self.groq_api_key = groq_api_key or config.groq_api_key
@@ -67,6 +72,9 @@ class GeminiService:
             self.cloudflare_model = cloudflare_model or config.cloudflare_model
             self.huggingface_api_token = huggingface_api_token or config.huggingface_api_token
             self.huggingface_model = huggingface_model or config.huggingface_model
+            self.glm_api_key = glm_api_key or getattr(config, "glm_api_key", None)
+            self.glm_model = glm_model or getattr(config, "glm_model", "glm-4v-flash")
+            self.enable_ovh = enable_ovh if enable_ovh is not None else getattr(config, "enable_ovh", True)
             self.primary_provider = primary_provider or config.primary_provider
         else:
             self.api_key = api_key
@@ -77,6 +85,7 @@ class GeminiService:
             self.github_model = github_model or "gpt-4o-mini"
             self.openrouter_api_key = openrouter_api_key
             self.openrouter_model = openrouter_model or "nvidia/nemotron-3.5-super-vl:free"
+            self.openrouter_base_url = openrouter_base_url or "https://openrouter.ai/api/v1"
             self.perplexity_api_key = perplexity_api_key
             self.perplexity_model = perplexity_model or "sonar"
             self.groq_api_key = groq_api_key
@@ -88,6 +97,9 @@ class GeminiService:
             self.cloudflare_model = cloudflare_model or "@cf/meta/llama-3.2-11b-vision-instruct"
             self.huggingface_api_token = huggingface_api_token
             self.huggingface_model = huggingface_model or "meta-llama/Llama-3.2-11B-Vision-Instruct"
+            self.glm_api_key = glm_api_key
+            self.glm_model = glm_model or "glm-4v-flash"
+            self.enable_ovh = enable_ovh if enable_ovh is not None else False
             self.primary_provider = primary_provider or ("openrouter" if openrouter_api_key else ("github" if github_token else "gemini"))
         # Initialize client
         self.client = genai.Client(api_key=self.api_key)
@@ -153,14 +165,16 @@ class GeminiService:
         # Add remaining configured providers in priority order
         fallbacks = [
             ("openrouter", self.openrouter_api_key),
-            ("mistral", self.mistral_api_key),
             ("cloudflare", self.cloudflare_api_token and self.cloudflare_account_id),
             ("huggingface", self.huggingface_api_token),
-            ("perplexity", self.perplexity_api_key),
+            ("glm", self.glm_api_key),
             ("groq", self.groq_api_key),
+            ("perplexity", self.perplexity_api_key),
+            ("mistral", self.mistral_api_key),
             ("github", self.github_token),
-            ("gemini", True),
             ("grok", self.grok_api_key),
+            ("gemini", True),
+            ("ovh", self.enable_ovh),  # Keyless OVHcloud Kepler (Qwen2.5-VL-72B) safety net
         ]
         for name, key in fallbacks:
             if key and name not in provider_order:
@@ -182,9 +196,11 @@ class GeminiService:
                 elif provider == "gemini":
                     return self._analyze_with_gemini(image_path_obj, prompt, callback)
                 elif provider == "openrouter":
+                    or_base = (self.openrouter_base_url or "https://openrouter.ai/api/v1").rstrip("/")
+                    or_url = f"{or_base}/chat/completions"
                     try:
                         return self._analyze_with_openai_compatible(
-                            url="https://openrouter.ai/api/v1/chat/completions",
+                            url=or_url,
                             api_key=self.openrouter_api_key,
                             model=self.openrouter_model,
                             image_path=image_path_obj,
@@ -201,7 +217,7 @@ class GeminiService:
                         if self.openrouter_model != "openrouter/free":
                             print(f"[openrouter] {self.openrouter_model} failed ({or_err}). Trying openrouter/free...")
                             return self._analyze_with_openai_compatible(
-                                url="https://openrouter.ai/api/v1/chat/completions",
+                                url=or_url,
                                 api_key=self.openrouter_api_key,
                                 model="openrouter/free",
                                 image_path=image_path_obj,
@@ -214,6 +230,26 @@ class GeminiService:
                                 },
                             )
                         raise
+                elif provider == "ovh":
+                    return self._analyze_with_openai_compatible(
+                        url="https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
+                        api_key=None,
+                        model="Qwen2.5-VL-72B-Instruct",
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="OVHcloud Kepler",
+                    )
+                elif provider == "glm":
+                    return self._analyze_with_openai_compatible(
+                        url="https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                        api_key=self.glm_api_key,
+                        model=self.glm_model,
+                        image_path=image_path_obj,
+                        prompt=prompt,
+                        callback=callback,
+                        provider_name="Zhipu GLM-4V",
+                    )
                 elif provider == "mistral":
                     return self._analyze_with_openai_compatible(
                         url="https://api.mistral.ai/v1/chat/completions",
@@ -347,9 +383,10 @@ class GeminiService:
             b64_data = base64.b64encode(f.read()).decode("utf-8")
 
         headers = {
-            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         if extra_headers:
             headers.update(extra_headers)
 

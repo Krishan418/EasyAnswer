@@ -204,6 +204,45 @@ class TestGeminiService(unittest.TestCase):
             self.assertEqual(result, "Option A (Free Router)")
             self.assertIn("openrouter/free", calls)
 
+    @mock.patch("google.genai.Client")
+    def test_ovh_keyless_fallback(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.side_effect = Exception("All standard keys failed")
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(api_key="dummy_key", enable_ovh=True)
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option D** (OVH)") as mock_ovh:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option D** (OVH)")
+            mock_ovh.assert_called_once()
+            args, kwargs = mock_ovh.call_args
+            self.assertEqual(kwargs.get("provider_name"), "OVHcloud Kepler")
+            self.assertEqual(kwargs.get("model"), "Qwen2.5-VL-72B-Instruct")
+
+    @mock.patch("google.genai.Client")
+    def test_glm_as_primary_provider(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            api_key="dummy_key",
+            glm_api_key="dummy_glm_key",
+            primary_provider="glm",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option A** (GLM)") as mock_glm:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option A** (GLM)")
+            mock_glm.assert_called_once()
+            args, kwargs = mock_glm.call_args
+            self.assertEqual(kwargs.get("provider_name"), "Zhipu GLM-4V")
+            self.assertEqual(kwargs.get("model"), "glm-4v-flash")
+
 
 if __name__ == "__main__":
     unittest.main()
