@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from google import genai
 from google.genai import types
 from PIL import Image
+import httpx
 
 from .config import get_config
 
@@ -224,16 +225,7 @@ class GeminiService:
                         provider_name="Mistral AI",
                     )
                 elif provider == "cloudflare":
-                    url = f"https://api.cloudflare.com/client/v4/accounts/{self.cloudflare_account_id}/ai/v1/chat/completions"
-                    return self._analyze_with_openai_compatible(
-                        url=url,
-                        api_key=self.cloudflare_api_token,
-                        model=self.cloudflare_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="Cloudflare Workers AI",
-                    )
+                    return self._analyze_with_cloudflare(image_path_obj, prompt, callback)
                 elif provider == "huggingface":
                     url = f"https://api-inference.huggingface.co/models/{self.huggingface_model}/v1/chat/completions"
                     return self._analyze_with_openai_compatible(
@@ -411,6 +403,39 @@ class GeminiService:
         if not result:
             raise GeminiServiceError(f"Empty response from {provider_name}")
         return result
+
+    def _analyze_with_cloudflare(
+        self,
+        image_path: Path,
+        prompt: str,
+        callback: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """Call Cloudflare Workers AI with vision support."""
+        url = f"https://api.cloudflare.com/client/v4/accounts/{self.cloudflare_account_id}/ai/run/{self.cloudflare_model}"
+        headers = {
+            "Authorization": f"Bearer {self.cloudflare_api_token}",
+            "Content-Type": "application/json",
+        }
+        with open(image_path, "rb") as f:
+            img_bytes = list(f.read())
+
+        payload = {
+            "prompt": prompt,
+            "image": img_bytes,
+        }
+
+        with httpx.Client(timeout=35.0) as client:
+            resp = client.post(url, headers=headers, json=payload)
+            if resp.status_code != 200:
+                err_text = resp.text
+                raise GeminiServiceError(f"Cloudflare Workers AI error ({resp.status_code}): {err_text}")
+            data = resp.json()
+            result = data.get("result", {}).get("response", "").strip()
+            if not result:
+                raise GeminiServiceError("Empty response from Cloudflare Workers AI")
+            if callback:
+                callback(result)
+            return result
 
     def _analyze_with_grok(
         self,
