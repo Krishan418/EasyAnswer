@@ -72,6 +72,8 @@ class Config:
     glm_model: str = "glm-4.6v"
     enable_ovh: bool = True
     primary_provider: str = "cloudflare"
+    http_connect_timeout: float = 3.5
+    http_read_timeout: float = 12.0
     popup_width: int = 260
     popup_height: int = 85
     popup_opacity: float = 0.70
@@ -195,6 +197,8 @@ def get_config() -> Config:
         glm_model=glm_model,
         enable_ovh=enable_ovh,
         primary_provider=primary_provider,
+        http_connect_timeout=max(1.0, _env_float("HTTP_CONNECT_TIMEOUT", 3.5)),
+        http_read_timeout=max(3.0, _env_float("HTTP_READ_TIMEOUT", 12.0)),
         popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
         popup_height=max(50, _env_int("POPUP_HEIGHT", 85)),
         popup_opacity=min(1.0, max(0.2, _env_float("POPUP_OPACITY", 0.70))),

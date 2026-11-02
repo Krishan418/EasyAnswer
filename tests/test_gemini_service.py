@@ -243,6 +243,59 @@ class TestGeminiService(unittest.TestCase):
             self.assertEqual(kwargs.get("provider_name"), "Zhipu GLM-4V")
             self.assertEqual(kwargs.get("model"), "glm-4v-flash")
 
+    @mock.patch("google.genai.Client")
+    def test_image_optimization_resizes_and_compresses(self, mock_client_cls):
+        service = GeminiService(api_key="dummy_key")
+        # Create a large 2000x1500 RGBA image
+        img_path = self.temp_path / "huge.png"
+        Image.new("RGBA", (2000, 1500), (255, 0, 0, 128)).save(img_path)
+
+        opt_path = service._optimize_image_for_ai(img_path)
+        self.assertTrue(opt_path.exists())
+        self.assertNotEqual(opt_path, img_path)
+
+        with Image.open(opt_path) as opt_img:
+            # Max dimension must not exceed 1280
+            self.assertLessEqual(max(opt_img.size), 1280)
+            self.assertEqual(opt_img.format, "JPEG")
+            self.assertEqual(opt_img.mode, "RGB")
+
+        # Cleanup
+        opt_path.unlink()
+
+    @mock.patch("google.genai.Client")
+    def test_circuit_breaker_deprioritizes_failed_provider(self, mock_client_cls):
+        mock_client = mock.MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.side_effect = Exception("Temporary 500 error")
+
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        # Clear any failed state before test
+        GeminiService._failed_providers.clear()
+
+        service = GeminiService(
+            api_key="dummy_key",
+            glm_api_key="dummy_glm_key",
+            primary_provider="gemini",
+        )
+        # First call: gemini fails, falls back to GLM and marks gemini as failed
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Option B (GLM)") as mock_glm:
+            res1 = service.analyze_image(str(img_path))
+            self.assertEqual(res1, "Option B (GLM)")
+            self.assertIn("gemini", GeminiService._failed_providers)
+
+        # Second call: circuit breaker places healthy GLM ahead of failed gemini
+        mock_client.models.generate_content_stream.reset_mock()
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Option B (GLM Instant)") as mock_glm:
+            res2 = service.analyze_image(str(img_path))
+            self.assertEqual(res2, "Option B (GLM Instant)")
+            # Gemini stream should NOT even be called first because it is in cooldown!
+            mock_client.models.generate_content_stream.assert_not_called()
+
+        GeminiService._failed_providers.clear()
+
 
 if __name__ == "__main__":
     unittest.main()

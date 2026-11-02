@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -20,6 +21,10 @@ class GeminiServiceError(Exception):
 
 
 class GeminiService:
+    # Circuit breaker tracking for failed providers across calls: provider -> timestamp
+    _failed_providers: dict = {}
+    _CIRCUIT_COOLDOWN: float = 180.0  # 3 minutes cooldown before re-trying a failed provider
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -46,6 +51,8 @@ class GeminiService:
         glm_model: Optional[str] = None,
         enable_ovh: Optional[bool] = None,
         primary_provider: Optional[str] = None,
+        connect_timeout: Optional[float] = None,
+        read_timeout: Optional[float] = None,
     ):
         if api_key is None:
             try:
@@ -76,6 +83,8 @@ class GeminiService:
             self.glm_model = glm_model or getattr(config, "glm_model", "glm-4v-flash")
             self.enable_ovh = enable_ovh if enable_ovh is not None else getattr(config, "enable_ovh", True)
             self.primary_provider = primary_provider or config.primary_provider
+            self.connect_timeout = connect_timeout if connect_timeout is not None else getattr(config, "http_connect_timeout", 3.5)
+            self.read_timeout = read_timeout if read_timeout is not None else getattr(config, "http_read_timeout", 12.0)
         else:
             self.api_key = api_key
             self.model = model or "gemini-3.5-flash"
@@ -101,6 +110,8 @@ class GeminiService:
             self.glm_model = glm_model or "glm-4v-flash"
             self.enable_ovh = enable_ovh if enable_ovh is not None else False
             self.primary_provider = primary_provider or ("openrouter" if openrouter_api_key else ("github" if github_token else "gemini"))
+            self.connect_timeout = connect_timeout if connect_timeout is not None else 3.5
+            self.read_timeout = read_timeout if read_timeout is not None else 12.0
         # Initialize client
         self.client = genai.Client(api_key=self.api_key)
 
@@ -123,6 +134,44 @@ class GeminiService:
             raise GeminiServiceError(f"Unreadable or corrupted image: {e}")
         return path
 
+    def _optimize_image_for_ai(self, image_path: Path) -> Path:
+        """
+        Compress and resize screenshot in memory to ultra-small JPEG (~50-80 KB)
+        maintaining crisp resolution for text and code OCR.
+        Slashes upload latency by 90%+ and prevents huge JSON payloads.
+        """
+        import tempfile
+        try:
+            with Image.open(image_path) as img:
+                w, h = img.size
+                max_dim = 1280
+                scale = min(1.0, max_dim / max(w, h)) if max(w, h) > max_dim else 1.0
+                new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+
+                # Handle transparency (RGBA, LA, P) cleanly onto white background
+                if img.mode in ("RGBA", "LA", "P"):
+                    bg = Image.new("RGB", (w, h), (255, 255, 255))
+                    converted = img.convert("RGBA") if img.mode == "P" else img
+                    alpha = converted.split()[-1] if converted.mode in ("RGBA", "LA") else None
+                    bg.paste(converted, mask=alpha)
+                    rgb_img = bg
+                elif img.mode != "RGB":
+                    rgb_img = img.convert("RGB")
+                else:
+                    rgb_img = img.copy()
+
+                if scale < 1.0:
+                    rgb_img = rgb_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+                # Save as optimized JPEG
+                handle, temp_path = tempfile.mkstemp(prefix="ea_opt_", suffix=".jpg")
+                os.close(handle)
+                rgb_img.save(temp_path, format="JPEG", quality=85, optimize=True)
+                return Path(temp_path)
+        except Exception:
+            # Fallback to original image if compression fails
+            return image_path
+
     def analyze_image_stream(
         self,
         image_path: str,
@@ -134,6 +183,8 @@ class GeminiService:
         Calls callback(chunk_text) and returns the full text.
         """
         image_path_obj = self._validate_image(image_path)
+        optimized_image_path = self._optimize_image_for_ai(image_path_obj)
+        cleanup_optimized = (optimized_image_path != image_path_obj)
 
         if prompt is None:
             prompt = (
@@ -159,145 +210,174 @@ class GeminiService:
             provider_order.append("groq")
         elif self.primary_provider == "github" and self.github_token:
             provider_order.append("github")
+        elif self.primary_provider == "glm" and self.glm_api_key:
+            provider_order.append("glm")
         else:
             provider_order.append("gemini")
 
-        # Add remaining configured providers in priority order
+        # Add remaining configured providers in priority order (Fast & resilient first)
         fallbacks = [
+            ("gemini", True),
+            ("glm", self.glm_api_key),
             ("openrouter", self.openrouter_api_key),
             ("cloudflare", self.cloudflare_api_token and self.cloudflare_account_id),
+            ("ovh", self.enable_ovh),  # Keyless OVHcloud Kepler (Qwen2.5-VL-72B) safety net
+            ("github", self.github_token),
+            ("mistral", self.mistral_api_key),
             ("huggingface", self.huggingface_api_token),
-            ("glm", self.glm_api_key),
             ("groq", self.groq_api_key),
             ("perplexity", self.perplexity_api_key),
-            ("mistral", self.mistral_api_key),
-            ("github", self.github_token),
             ("grok", self.grok_api_key),
-            ("gemini", True),
-            ("ovh", self.enable_ovh),  # Keyless OVHcloud Kepler (Qwen2.5-VL-72B) safety net
         ]
         for name, key in fallbacks:
             if key and name not in provider_order:
                 provider_order.append(name)
 
+        # Circuit breaker: prioritize healthy providers over recently failed ones
+        now = time.time()
+        healthy = []
+        cooling_down = []
+        for p in provider_order:
+            failed_at = self._failed_providers.get(p, 0)
+            if (now - failed_at) < self._CIRCUIT_COOLDOWN:
+                cooling_down.append(p)
+            else:
+                healthy.append(p)
+        provider_order = healthy + cooling_down
+
         errors = []
-        for provider in provider_order:
-            try:
-                if provider == "github":
-                    return self._analyze_with_openai_compatible(
-                        url="https://models.github.ai/inference/chat/completions",
-                        api_key=self.github_token,
-                        model=self.github_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="GitHub Models",
-                    )
-                elif provider == "gemini":
-                    return self._analyze_with_gemini(image_path_obj, prompt, callback)
-                elif provider == "openrouter":
-                    or_base = (self.openrouter_base_url or "https://openrouter.ai/api/v1").rstrip("/")
-                    or_url = f"{or_base}/chat/completions"
-                    try:
-                        return self._analyze_with_openai_compatible(
-                            url=or_url,
-                            api_key=self.openrouter_api_key,
-                            model=self.openrouter_model,
-                            image_path=image_path_obj,
+        try:
+            for provider in provider_order:
+                try:
+                    if provider == "github":
+                        result = self._analyze_with_openai_compatible(
+                            url="https://models.github.ai/inference/chat/completions",
+                            api_key=self.github_token,
+                            model=self.github_model,
+                            image_path=optimized_image_path,
                             prompt=prompt,
                             callback=callback,
-                            provider_name="OpenRouter",
-                            extra_headers={
-                                "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
-                                "X-Title": "EasyAnswer",
-                            },
+                            provider_name="GitHub Models",
                         )
-                    except Exception as or_err:
-                        # If primary model is down, automatically fallback to openrouter/free
-                        if self.openrouter_model != "openrouter/free":
-                            print(f"[openrouter] {self.openrouter_model} failed ({or_err}). Trying openrouter/free...")
-                            return self._analyze_with_openai_compatible(
+                    elif provider == "gemini":
+                        result = self._analyze_with_gemini(optimized_image_path, prompt, callback)
+                    elif provider == "openrouter":
+                        or_base = (self.openrouter_base_url or "https://openrouter.ai/api/v1").rstrip("/")
+                        or_url = f"{or_base}/chat/completions"
+                        try:
+                            result = self._analyze_with_openai_compatible(
                                 url=or_url,
                                 api_key=self.openrouter_api_key,
-                                model="openrouter/free",
-                                image_path=image_path_obj,
+                                model=self.openrouter_model,
+                                image_path=optimized_image_path,
                                 prompt=prompt,
                                 callback=callback,
-                                provider_name="OpenRouter (free router)",
+                                provider_name="OpenRouter",
                                 extra_headers={
                                     "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
                                     "X-Title": "EasyAnswer",
                                 },
                             )
-                        raise
-                elif provider == "ovh":
-                    return self._analyze_with_openai_compatible(
-                        url="https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
-                        api_key=None,
-                        model="Qwen2.5-VL-72B-Instruct",
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="OVHcloud Kepler",
-                    )
-                elif provider == "glm":
-                    return self._analyze_with_openai_compatible(
-                        url="https://open.bigmodel.cn/api/paas/v4/chat/completions",
-                        api_key=self.glm_api_key,
-                        model=self.glm_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="Zhipu GLM-4V",
-                    )
-                elif provider == "mistral":
-                    return self._analyze_with_openai_compatible(
-                        url="https://api.mistral.ai/v1/chat/completions",
-                        api_key=self.mistral_api_key,
-                        model=self.mistral_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="Mistral AI",
-                    )
-                elif provider == "cloudflare":
-                    return self._analyze_with_cloudflare(image_path_obj, prompt, callback)
-                elif provider == "huggingface":
-                    url = f"https://api-inference.huggingface.co/models/{self.huggingface_model}/v1/chat/completions"
-                    return self._analyze_with_openai_compatible(
-                        url=url,
-                        api_key=self.huggingface_api_token,
-                        model=self.huggingface_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="Hugging Face",
-                    )
-                elif provider == "perplexity":
-                    return self._analyze_with_openai_compatible(
-                        url="https://api.perplexity.ai/chat/completions",
-                        api_key=self.perplexity_api_key,
-                        model=self.perplexity_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="Perplexity AI",
-                    )
-                elif provider == "groq":
-                    return self._analyze_with_openai_compatible(
-                        url="https://api.groq.com/openai/v1/chat/completions",
-                        api_key=self.groq_api_key,
-                        model=self.groq_model,
-                        image_path=image_path_obj,
-                        prompt=prompt,
-                        callback=callback,
-                        provider_name="Groq Cloud",
-                    )
-                elif provider == "grok":
-                    return self._analyze_with_grok(image_path_obj, prompt, callback)
-            except Exception as exc:
-                errors.append(f"{provider}: {exc}")
-                print(f"[failover] {provider} failed ({exc}). Trying next provider...", file=sys.stderr)
+                        except Exception as or_err:
+                            # If primary model is down, automatically fallback to openrouter/free
+                            if self.openrouter_model != "openrouter/free":
+                                print(f"[openrouter] {self.openrouter_model} failed ({or_err}). Trying openrouter/free...")
+                                result = self._analyze_with_openai_compatible(
+                                    url=or_url,
+                                    api_key=self.openrouter_api_key,
+                                    model="openrouter/free",
+                                    image_path=optimized_image_path,
+                                    prompt=prompt,
+                                    callback=callback,
+                                    provider_name="OpenRouter (free router)",
+                                    extra_headers={
+                                        "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
+                                        "X-Title": "EasyAnswer",
+                                    },
+                                )
+                            else:
+                                raise
+                    elif provider == "ovh":
+                        result = self._analyze_with_openai_compatible(
+                            url="https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions",
+                            api_key=None,
+                            model="Qwen2.5-VL-72B-Instruct",
+                            image_path=optimized_image_path,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="OVHcloud Kepler",
+                        )
+                    elif provider == "glm":
+                        result = self._analyze_with_openai_compatible(
+                            url="https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                            api_key=self.glm_api_key,
+                            model=self.glm_model,
+                            image_path=optimized_image_path,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="Zhipu GLM-4V",
+                        )
+                    elif provider == "mistral":
+                        result = self._analyze_with_openai_compatible(
+                            url="https://api.mistral.ai/v1/chat/completions",
+                            api_key=self.mistral_api_key,
+                            model=self.mistral_model,
+                            image_path=optimized_image_path,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="Mistral AI",
+                        )
+                    elif provider == "cloudflare":
+                        result = self._analyze_with_cloudflare(optimized_image_path, prompt, callback)
+                    elif provider == "huggingface":
+                        url = f"https://api-inference.huggingface.co/models/{self.huggingface_model}/v1/chat/completions"
+                        result = self._analyze_with_openai_compatible(
+                            url=url,
+                            api_key=self.huggingface_api_token,
+                            model=self.huggingface_model,
+                            image_path=optimized_image_path,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="Hugging Face",
+                        )
+                    elif provider == "perplexity":
+                        result = self._analyze_with_openai_compatible(
+                            url="https://api.perplexity.ai/chat/completions",
+                            api_key=self.perplexity_api_key,
+                            model=self.perplexity_model,
+                            image_path=optimized_image_path,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="Perplexity AI",
+                        )
+                    elif provider == "groq":
+                        result = self._analyze_with_openai_compatible(
+                            url="https://api.groq.com/openai/v1/chat/completions",
+                            api_key=self.groq_api_key,
+                            model=self.groq_model,
+                            image_path=optimized_image_path,
+                            prompt=prompt,
+                            callback=callback,
+                            provider_name="Groq Cloud",
+                        )
+                    elif provider == "grok":
+                        result = self._analyze_with_grok(optimized_image_path, prompt, callback)
+                    else:
+                        continue
+
+                    # Provider succeeded! Remove any failure timestamp
+                    self._failed_providers.pop(provider, None)
+                    return result
+                except Exception as exc:
+                    self._failed_providers[provider] = time.time()
+                    errors.append(f"{provider}: {exc}")
+                    print(f"[failover] {provider} failed ({exc}). Trying next provider...", file=sys.stderr)
+        finally:
+            if cleanup_optimized and optimized_image_path.exists():
+                try:
+                    optimized_image_path.unlink()
+                except OSError:
+                    pass
 
         # Map common errors if all failed
         last_err = errors[-1] if errors else "No AI provider available."
@@ -409,8 +489,14 @@ class GeminiService:
             "stream": True,
         }
 
+        timeout = httpx.Timeout(
+            connect=self.connect_timeout,
+            read=self.read_timeout,
+            write=5.0,
+            pool=3.0,
+        )
         full_text = []
-        with httpx.Client(timeout=35.0) as client:
+        with httpx.Client(timeout=timeout) as client:
             with client.stream("POST", url, headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     err_body = response.read().decode("utf-8", errors="replace")
@@ -447,7 +533,8 @@ class GeminiService:
         prompt: str,
         callback: Optional[Callable[[str], None]] = None,
     ) -> str:
-        """Call Cloudflare Workers AI with vision support."""
+        """Call Cloudflare Workers AI with vision support and real-time streaming."""
+        import json
         url = f"https://api.cloudflare.com/client/v4/accounts/{self.cloudflare_account_id}/ai/run/{self.cloudflare_model}"
         headers = {
             "Authorization": f"Bearer {self.cloudflare_api_token}",
@@ -459,20 +546,54 @@ class GeminiService:
         payload = {
             "prompt": prompt,
             "image": img_bytes,
+            "stream": True,
         }
 
-        with httpx.Client(timeout=35.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code != 200:
-                err_text = resp.text
-                raise GeminiServiceError(f"Cloudflare Workers AI error ({resp.status_code}): {err_text}")
-            data = resp.json()
-            result = data.get("result", {}).get("response", "").strip()
-            if not result:
-                raise GeminiServiceError("Empty response from Cloudflare Workers AI")
-            if callback:
-                callback(result)
-            return result
+        timeout = httpx.Timeout(
+            connect=self.connect_timeout,
+            read=self.read_timeout,
+            write=5.0,
+            pool=3.0,
+        )
+
+        full_text = []
+        with httpx.Client(timeout=timeout) as client:
+            with client.stream("POST", url, headers=headers, json=payload) as resp:
+                if resp.status_code != 200:
+                    err_text = resp.read().decode("utf-8", errors="replace")
+                    raise GeminiServiceError(f"Cloudflare Workers AI error ({resp.status_code}): {err_text}")
+
+                content_type = resp.headers.get("content-type", "")
+                if "text/event-stream" in content_type:
+                    for line in resp.iter_lines():
+                        if not line:
+                            continue
+                        if line.startswith("data: "):
+                            line = line[6:].strip()
+                        if line == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(line)
+                            token = chunk.get("response", "")
+                            if token:
+                                full_text.append(token)
+                                if callback:
+                                    callback(token)
+                        except Exception:
+                            continue
+                else:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    data = json.loads(body)
+                    token = data.get("result", {}).get("response", "").strip()
+                    if token:
+                        full_text.append(token)
+                        if callback:
+                            callback(token)
+
+        result = "".join(full_text).strip()
+        if not result:
+            raise GeminiServiceError("Empty response from Cloudflare Workers AI")
+        return result
 
     def _analyze_with_grok(
         self,
