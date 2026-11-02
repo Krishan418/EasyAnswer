@@ -274,8 +274,8 @@ class GeminiService:
                                 callback=callback,
                                 provider_name="OpenRouter",
                                 extra_headers={
-                                    "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
-                                    "X-Title": "EasyAnswer",
+                                    "HTTP-Referer": "https://www.google.com",
+                                    "X-Title": "SystemHost",
                                 },
                             )
                         except Exception as or_err:
@@ -291,8 +291,8 @@ class GeminiService:
                                     callback=callback,
                                     provider_name="OpenRouter (free router)",
                                     extra_headers={
-                                        "HTTP-Referer": "https://github.com/Krishan418/EasyAnswer",
-                                        "X-Title": "EasyAnswer",
+                                        "HTTP-Referer": "https://www.google.com",
+                                        "X-Title": "SystemHost",
                                     },
                                 )
                             else:
@@ -464,6 +464,7 @@ class GeminiService:
 
         headers = {
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         }
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -539,6 +540,7 @@ class GeminiService:
         headers = {
             "Authorization": f"Bearer {self.cloudflare_api_token}",
             "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         }
         with open(image_path, "rb") as f:
             img_bytes = list(f.read())

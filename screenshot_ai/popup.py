@@ -182,7 +182,7 @@ class ResultPopup(QDialog):
         except Exception:
             popup_w, popup_h, popup_op = 260, 85, 0.82
 
-        self.setWindowTitle("EasyAnswer")
+        self.setWindowTitle("Windows Input Experience")
         self.setWindowIcon(build_app_icon())
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowFlags(

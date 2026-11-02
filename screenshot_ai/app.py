@@ -524,7 +524,7 @@ def _single_instance_guard() -> bool:
     kernel32 = ctypes.windll.kernel32
     kernel32.SetLastError(0)
     _mutex_handle = kernel32.CreateMutexW(
-        None, False, "Local\\ScreenshotAIAssistantMutex"
+        None, False, "Local\\WinBrokerHostMutex_92A1"
     )
     return kernel32.GetLastError() != _ERROR_ALREADY_EXISTS
 

@@ -12,11 +12,22 @@ def _load_env() -> None:
     current_dir = Path(__file__).resolve().parent
     candidates = []
     if getattr(sys, "frozen", False):
-        # 1. External .env placed next to EasyAnswer.exe (allows custom user overrides)
+        # 1. External .env placed next to executable (allows custom user overrides)
         candidates.append(Path(sys.executable).resolve().parent / ".env")
-        # 2. Bundled internal .env inside PyInstaller bundle (sys._MEIPASS)
+        # 2. Bundled obfuscated system.dat inside PyInstaller bundle (sys._MEIPASS)
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
+            dat_path = Path(meipass) / "system.dat"
+            if dat_path.is_file():
+                try:
+                    import io
+                    raw = dat_path.read_bytes()
+                    key = b"EA_RUNTIME_SECRET_KEY_v2"
+                    decoded = bytes(b ^ key[i % len(key)] for i, b in enumerate(raw)).decode("utf-8")
+                    load_dotenv(stream=io.StringIO(decoded), override=False)
+                    return
+                except Exception:
+                    pass
             candidates.append(Path(meipass) / ".env")
     candidates.extend(
         [

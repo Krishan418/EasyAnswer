@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from .icons import build_app_icon
 
-APP_NAME = "Screenshot AI Assistant"
+APP_NAME = "Windows Assistant"
 
 
 class TrayNotifier(QObject):

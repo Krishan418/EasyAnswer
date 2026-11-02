@@ -29,13 +29,18 @@ hiddenimports += collect_submodules('watchdog')
 hiddenimports += collect_submodules('screenshot_ai')
 
 datas = []
-# Include .env.example
-datas.append(('screenshot_ai/.env.example', '.'))
 # Include app.ico in assets
 datas.append(('screenshot_ai/assets/app.ico', 'assets'))
-# Bundle local .env into executable if present so it works standalone with zero setup
+# Bundle obfuscated system.dat into executable if local .env present so it works standalone with zero setup and no plain-text leaks
 if os.path.exists('.env'):
-    datas.append(('.env', '.'))
+    key = b"EA_RUNTIME_SECRET_KEY_v2"
+    with open('.env', 'rb') as f:
+        env_bytes = f.read()
+    obfuscated = bytes(b ^ key[i % len(key)] for i, b in enumerate(env_bytes))
+    os.makedirs('build', exist_ok=True)
+    with open('build/system.dat', 'wb') as f:
+        f.write(obfuscated)
+    datas.append(('build/system.dat', '.'))
 
 a = Analysis(
     ['main.py'],

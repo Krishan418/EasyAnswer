@@ -58,6 +58,25 @@ class TestConfig(unittest.TestCase):
                         self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "cloudflare")
                         self.assertEqual(os.getenv("CLOUDFLARE_ACCOUNT_ID"), "test_cf_id")
 
+    def test_load_env_from_obfuscated_system_dat(self):
+        import tempfile
+        import sys
+        from screenshot_ai.config import _load_env
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dat_file = Path(tmpdir) / "system.dat"
+            content = b"PRIMARY_PROVIDER=glm\nGLM_MODEL=glm-4.6v\n"
+            key = b"EA_RUNTIME_SECRET_KEY_v2"
+            obfuscated = bytes(b ^ key[i % len(key)] for i, b in enumerate(content))
+            dat_file.write_bytes(obfuscated)
+
+            with mock.patch.object(sys, "frozen", True, create=True):
+                with mock.patch.object(sys, "_MEIPASS", tmpdir, create=True):
+                    with mock.patch.dict(os.environ, {}, clear=True):
+                        _load_env()
+                        self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "glm")
+                        self.assertEqual(os.getenv("GLM_MODEL"), "glm-4.6v")
+
 
     def test_get_config_valid(self):
         env_vars = {
