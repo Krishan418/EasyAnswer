@@ -54,7 +54,7 @@ class Config:
     toggle_hotkey: str = "ctrl+~"
     quit_hotkey: str = "ctrl+shift+q"
     show_tray_icon: bool = False
-    auto_exit_minutes: int = 15
+    auto_exit_minutes: int = 0
     enable_notifications: bool = True
     notification_duration_ms: int = 4000
     watch_folder: Optional[str] = None
@@ -82,13 +82,13 @@ class Config:
     glm_api_key: Optional[str] = None
     glm_model: str = "glm-4.6v"
     enable_ovh: bool = True
-    primary_provider: str = "cloudflare"
+    primary_provider: str = "gemini"
     http_connect_timeout: float = 3.5
     http_read_timeout: float = 12.0
     popup_width: int = 260
     popup_height: int = 85
     popup_opacity: float = 0.70
-    auto_show_popup: bool = False
+    auto_show_popup: bool = True
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -168,9 +168,9 @@ def get_config() -> Config:
     glm_api_key = os.getenv("GLM_API_KEY", "").strip() or None
     glm_model = os.getenv("GLM_MODEL", "glm-4.6v").strip() or "glm-4.6v"
     enable_ovh = _env_bool("ENABLE_OVH", True)
-    primary_provider = os.getenv("PRIMARY_PROVIDER", "cloudflare").strip().lower()
+    primary_provider = os.getenv("PRIMARY_PROVIDER", "gemini").strip().lower()
     if not primary_provider:
-        primary_provider = "cloudflare" if (cloudflare_api_token and cloudflare_account_id) else ("openrouter" if openrouter_api_key else "gemini")
+        primary_provider = "gemini" if api_key else ("openrouter" if openrouter_api_key else "cloudflare")
 
     return Config(
         gemini_api_key=api_key,
@@ -179,7 +179,7 @@ def get_config() -> Config:
         toggle_hotkey=toggle_hotkey,
         quit_hotkey=quit_hotkey,
         show_tray_icon=_env_bool("SHOW_TRAY_ICON", False),
-        auto_exit_minutes=max(0, _env_int("AUTO_EXIT_MINUTES", 15)),
+        auto_exit_minutes=max(0, _env_int("AUTO_EXIT_MINUTES", 0)),
         enable_notifications=_env_bool("ENABLE_NOTIFICATIONS", False),
         notification_duration_ms=max(1000, _env_int("NOTIFICATION_DURATION_MS", 4000)),
         watch_folder=watch_folder,
@@ -213,7 +213,7 @@ def get_config() -> Config:
         popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
         popup_height=max(50, _env_int("POPUP_HEIGHT", 85)),
         popup_opacity=min(1.0, max(0.2, _env_float("POPUP_OPACITY", 0.70))),
-        auto_show_popup=_env_bool("AUTO_SHOW_POPUP", False),
+        auto_show_popup=_env_bool("AUTO_SHOW_POPUP", True),
     )
 
 

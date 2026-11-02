@@ -101,12 +101,15 @@ class ScreenshotService:
         * a bitmap (what ``Win+Shift+S`` copies), saved as a temporary PNG;
         * a list of copied files (Explorer "Copy"), using the first image.
         """
-        try:
-            data = ImageGrab.grabclipboard()
-        except Exception as exc:  # noqa: BLE001 - clipboard can be locked
-            raise ScreenshotError(
-                f"Could not read the clipboard: {exc}. Try copying the snip again."
-            ) from exc
+        data = None
+        for _ in range(4):
+            try:
+                data = ImageGrab.grabclipboard()
+                if data is not None:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.04)
 
         if data is None:
             return None

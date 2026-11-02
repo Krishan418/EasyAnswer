@@ -235,29 +235,20 @@ class ApplicationController:
         """Clipboard-first action: analyze a copied snip, else open the window."""
         self._reset_idle_timer()
         if self.popup.is_busy:
-            if self.config.auto_show_popup:
-                self.open_popup()
+            self.open_popup()
             return
 
         if self.config.clipboard_on_hotkey:
             clipboard_image = self._read_clipboard_image(silent=True)
             if clipboard_image:
-                if self.config.auto_show_popup:
-                    self.popup.show_and_analyze(
-                        clipboard_image,
-                        source_label="Clipboard image",
-                        cleanup_after=True,
-                    )
-                else:
-                    self.popup.analyze_file(
-                        clipboard_image,
-                        source_label="Clipboard image",
-                        cleanup_after=True,
-                    )
+                self.popup.show_and_analyze(
+                    clipboard_image,
+                    source_label="Clipboard image",
+                    cleanup_after=True,
+                )
                 return
 
-        if self.config.auto_show_popup:
-            self.open_popup()
+        self.open_popup()
 
     def choose_screenshot(self) -> None:
         self._reset_idle_timer()

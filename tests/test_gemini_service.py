@@ -246,17 +246,17 @@ class TestGeminiService(unittest.TestCase):
     @mock.patch("google.genai.Client")
     def test_image_optimization_resizes_and_compresses(self, mock_client_cls):
         service = GeminiService(api_key="dummy_key")
-        # Create a large 2000x1500 RGBA image
+        # Create a large 3000x2000 RGBA image
         img_path = self.temp_path / "huge.png"
-        Image.new("RGBA", (2000, 1500), (255, 0, 0, 128)).save(img_path)
+        Image.new("RGBA", (3000, 2000), (255, 0, 0, 128)).save(img_path)
 
         opt_path = service._optimize_image_for_ai(img_path)
         self.assertTrue(opt_path.exists())
         self.assertNotEqual(opt_path, img_path)
 
         with Image.open(opt_path) as opt_img:
-            # Max dimension must not exceed 1280
-            self.assertLessEqual(max(opt_img.size), 1280)
+            # Max dimension must not exceed 2048
+            self.assertLessEqual(max(opt_img.size), 2048)
             self.assertEqual(opt_img.format, "JPEG")
             self.assertEqual(opt_img.mode, "RGB")
 

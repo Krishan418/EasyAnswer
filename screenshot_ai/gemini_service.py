@@ -136,15 +136,15 @@ class GeminiService:
 
     def _optimize_image_for_ai(self, image_path: Path) -> Path:
         """
-        Compress and resize screenshot in memory to ultra-small JPEG (~50-80 KB)
-        maintaining crisp resolution for text and code OCR.
-        Slashes upload latency by 90%+ and prevents huge JSON payloads.
+        Optimize screenshot in memory: preserves crisp, un-downscaled 100% resolution
+        for 1080p and standard displays (up to 2048px), and saves with high quality (95)
+        so fine text, math symbols, and code are never blurred or distorted.
         """
         import tempfile
         try:
             with Image.open(image_path) as img:
                 w, h = img.size
-                max_dim = 1280
+                max_dim = 2048
                 scale = min(1.0, max_dim / max(w, h)) if max(w, h) > max_dim else 1.0
                 new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
 
@@ -163,10 +163,10 @@ class GeminiService:
                 if scale < 1.0:
                     rgb_img = rgb_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                # Save as optimized JPEG
+                # Save as high-quality optimized JPEG (quality=95 prevents text ringing/blur)
                 handle, temp_path = tempfile.mkstemp(prefix="ea_opt_", suffix=".jpg")
                 os.close(handle)
-                rgb_img.save(temp_path, format="JPEG", quality=85, optimize=True)
+                rgb_img.save(temp_path, format="JPEG", quality=95, optimize=True)
                 return Path(temp_path)
         except Exception:
             # Fallback to original image if compression fails
@@ -188,10 +188,13 @@ class GeminiService:
 
         if prompt is None:
             prompt = (
-                "You are a fast, concise assistant analyzing this screenshot. "
-                "Give the direct answer first in 1 line (e.g. **Answer: Option X** or direct solution). "
-                "If needed, follow with at most 1-2 brief bullet points explaining why. "
-                "Keep the entire response compact, short, and to the point without filler or large headers."
+                "You are an expert exam and problem-solving assistant analyzing this screenshot. "
+                "Carefully examine the question, any diagrams, formulas, or code, and all answer choices. "
+                "Double-check your logic to ensure 100% accuracy and avoid common trick choices.\n\n"
+                "Format your response concisely:\n"
+                "**Answer: [Option Letter & Exact Answer Text / Exact Solution]**\n"
+                "- **Reasoning**: [1-2 concise bullet points explaining why this is correct and why other choices are wrong].\n"
+                "Keep it direct, accurate, and to the point without filler."
             )
 
         # Determine execution order based on primary_provider
@@ -220,9 +223,9 @@ class GeminiService:
             ("gemini", True),
             ("glm", self.glm_api_key),
             ("openrouter", self.openrouter_api_key),
-            ("cloudflare", self.cloudflare_api_token and self.cloudflare_account_id),
             ("ovh", self.enable_ovh),  # Keyless OVHcloud Kepler (Qwen2.5-VL-72B) safety net
             ("github", self.github_token),
+            ("cloudflare", self.cloudflare_api_token and self.cloudflare_account_id),
             ("mistral", self.mistral_api_key),
             ("huggingface", self.huggingface_api_token),
             ("groq", self.groq_api_key),
