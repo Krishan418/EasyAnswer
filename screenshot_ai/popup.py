@@ -182,7 +182,7 @@ class ResultPopup(QDialog):
         except Exception:
             popup_w, popup_h, popup_op = 260, 85, 0.82
 
-        self.setWindowTitle("Windows Input Experience")
+        self.setWindowTitle("DeskLens")
         self.setWindowIcon(build_app_icon())
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowFlags(
@@ -319,21 +319,14 @@ class ResultPopup(QDialog):
             from .config import get_config
             cfg = get_config()
             mapping = {
-                "openrouter": "OpenRouter",
-                "mistral": "Mistral AI",
-                "cloudflare": "Cloudflare AI",
-                "huggingface": "Hugging Face",
                 "ovh": "OVHcloud Kepler",
-                "glm": "Zhipu GLM-4V",
-                "gemini": "Gemini",
+                "openrouter": "OpenRouter",
+                "glm": "Zhipu GLM",
                 "groq": "Groq",
-                "perplexity": "Perplexity",
-                "github": "GitHub Models",
-                "grok": "Grok",
             }
-            return mapping.get(cfg.primary_provider.lower(), cfg.primary_provider.capitalize() or "OpenRouter")
+            return mapping.get(cfg.primary_provider.lower(), cfg.primary_provider.capitalize() or "OVHcloud Kepler")
         except Exception:
-            return "OpenRouter"
+            return "OVHcloud Kepler"
 
     def _reset_view(self) -> None:
         self.result_view.clear()

@@ -48,43 +48,48 @@ _load_env()
 
 @dataclass
 class Config:
-    gemini_api_key: str
+    # Primary AI Provider (ovh / groq / openrouter)
+    primary_provider: str = "ovh"
+
+    # 1. OVHcloud Kepler (Keyless Qwen2.5-VL-72B - unblocked & zero setup)
+    enable_ovh: bool = True
+    ovh_model: str = "Qwen2.5-VL-72B-Instruct"
+
+    # 2. Groq Cloud (Super Fast Vision Backup)
+    groq_api_key: Optional[str] = None
+    groq_model: str = "llama-3.2-11b-vision-preview"
+
+    # 3. OpenRouter (Free Vision models - last fallback)
+    openrouter_api_key: Optional[str] = None
+    openrouter_model: str = "nvidia/nemotron-3.5-super-vl:free"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # Optional / Backward-compatible fields
+    glm_api_key: Optional[str] = None
+    glm_model: Optional[str] = "glm-4.6v"
+    gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-3.5-flash"
+
+    # Hotkeys
     hotkey: str = "ctrl+shift+s"
     toggle_hotkey: str = "ctrl+~"
     quit_hotkey: str = "ctrl+shift+q"
+
+    # Stealth & Process Management
     show_tray_icon: bool = False
     auto_exit_minutes: int = 0
-    enable_notifications: bool = True
+    enable_notifications: bool = False
     notification_duration_ms: int = 4000
     watch_folder: Optional[str] = None
     start_minimized: bool = False
     clipboard_on_hotkey: bool = True
     watch_common_folders: bool = False
-    grok_api_key: Optional[str] = None
-    grok_model: str = "grok-2-vision-1212"
-    github_token: Optional[str] = None
-    github_model: str = "gpt-4o-mini"
-    openrouter_api_key: Optional[str] = None
-    openrouter_model: str = "nvidia/nemotron-3.5-super-vl:free"
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    perplexity_api_key: Optional[str] = None
-    perplexity_model: str = "sonar"
-    groq_api_key: Optional[str] = None
-    groq_model: str = "llama-3.2-11b-vision-preview"
-    mistral_api_key: Optional[str] = None
-    mistral_model: str = "pixtral-12b-2409"
-    cloudflare_account_id: Optional[str] = None
-    cloudflare_api_token: Optional[str] = None
-    cloudflare_model: str = "@cf/meta/llama-3.2-11b-vision-instruct"
-    huggingface_api_token: Optional[str] = None
-    huggingface_model: str = "meta-llama/Llama-3.2-11B-Vision-Instruct"
-    glm_api_key: Optional[str] = None
-    glm_model: str = "glm-4.6v"
-    enable_ovh: bool = True
-    primary_provider: str = "gemini"
+
+    # HTTP & Timeouts
     http_connect_timeout: float = 3.5
     http_read_timeout: float = 12.0
+
+    # UI Popup Customization
     popup_width: int = 260
     popup_height: int = 85
     popup_opacity: float = 0.70
@@ -118,63 +123,42 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-import base64
-
-# Built-in fallback API key for standalone deployment across PCs without .env
-_DEFAULT_KEY_B64 = "QVEuQWI4Uk42SmVsY0tKak1UNzQtaFRwV3AzeVFnZjZsRFFRai1tU0RKbnhjTHpZNWFDeVE="
-
-
-def _get_default_key() -> str:
-    try:
-        return base64.b64decode(_DEFAULT_KEY_B64).decode("utf-8")
-    except Exception:
-        return ""
-
-
 def get_config() -> Config:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        api_key = _get_default_key()
+    primary_provider = os.getenv("PRIMARY_PROVIDER", "ovh").strip().lower() or "ovh"
+    enable_ovh = _env_bool("ENABLE_OVH", True)
+    ovh_model = os.getenv("OVH_MODEL", "Qwen2.5-VL-72B-Instruct").strip() or "Qwen2.5-VL-72B-Instruct"
 
-    if not api_key:
-        raise ValueError(
-            "GEMINI_API_KEY is not set. "
-            "Create a .env file (copy from .env.example) and add your Gemini API key from Google AI Studio."
-        )
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip() or None
+    openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip() or "nvidia/nemotron-3.5-super-vl:free"
+    openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip() or "https://openrouter.ai/api/v1"
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+    glm_api_key = os.getenv("GLM_API_KEY", "").strip() or None
+    glm_model = os.getenv("GLM_MODEL", "glm-4.6v").strip() or "glm-4.6v"
+
+    groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.2-11b-vision-preview").strip() or "llama-3.2-11b-vision-preview"
+
+    gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip() or None
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
+
     hotkey = os.getenv("HOTKEY", "ctrl+shift+s").strip() or "ctrl+shift+s"
     toggle_hotkey = os.getenv("TOGGLE_HOTKEY", "ctrl+~").strip() or "ctrl+~"
     quit_hotkey = os.getenv("QUIT_HOTKEY", "ctrl+shift+q").strip() or "ctrl+shift+q"
     watch_folder = os.getenv("WATCH_FOLDER", "").strip() or None
-    grok_api_key = os.getenv("GROK_API_KEY", "").strip() or None
-    grok_model = os.getenv("GROK_MODEL", "grok-2-vision-1212").strip() or "grok-2-vision-1212"
-    github_token = os.getenv("GITHUB_TOKEN", "").strip() or None
-    github_model = os.getenv("GITHUB_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip() or None
-    openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip() or "nvidia/nemotron-3.5-super-vl:free"
-    openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip() or "https://openrouter.ai/api/v1"
-    perplexity_api_key = os.getenv("PERPLEXITY_API_KEY", "").strip() or None
-    perplexity_model = os.getenv("PERPLEXITY_MODEL", "sonar").strip() or "sonar"
-    groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
-    groq_model = os.getenv("GROQ_MODEL", "llama-3.2-11b-vision-preview").strip() or "llama-3.2-11b-vision-preview"
-    mistral_api_key = os.getenv("MISTRAL_API_KEY", "").strip() or None
-    mistral_model = os.getenv("MISTRAL_MODEL", "pixtral-12b-2409").strip() or "pixtral-12b-2409"
-    cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip() or None
-    cloudflare_api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip() or None
-    cloudflare_model = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.2-11b-vision-instruct").strip() or "@cf/meta/llama-3.2-11b-vision-instruct"
-    huggingface_api_token = os.getenv("HUGGINGFACE_API_TOKEN", "").strip() or None
-    huggingface_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.2-11B-Vision-Instruct").strip() or "meta-llama/Llama-3.2-11B-Vision-Instruct"
-    glm_api_key = os.getenv("GLM_API_KEY", "").strip() or None
-    glm_model = os.getenv("GLM_MODEL", "glm-4.6v").strip() or "glm-4.6v"
-    enable_ovh = _env_bool("ENABLE_OVH", True)
-    primary_provider = os.getenv("PRIMARY_PROVIDER", "gemini").strip().lower()
-    if not primary_provider:
-        primary_provider = "gemini" if api_key else ("openrouter" if openrouter_api_key else "cloudflare")
 
     return Config(
-        gemini_api_key=api_key,
-        gemini_model=model,
+        primary_provider=primary_provider,
+        enable_ovh=enable_ovh,
+        ovh_model=ovh_model,
+        openrouter_api_key=openrouter_api_key,
+        openrouter_model=openrouter_model,
+        openrouter_base_url=openrouter_base_url,
+        glm_api_key=glm_api_key,
+        glm_model=glm_model,
+        groq_api_key=groq_api_key,
+        groq_model=groq_model,
+        gemini_api_key=gemini_api_key,
+        gemini_model=gemini_model,
         hotkey=hotkey,
         toggle_hotkey=toggle_hotkey,
         quit_hotkey=quit_hotkey,
@@ -186,28 +170,6 @@ def get_config() -> Config:
         start_minimized=_env_bool("START_MINIMIZED", False),
         clipboard_on_hotkey=_env_bool("CLIPBOARD_ON_HOTKEY", True),
         watch_common_folders=_env_bool("WATCH_COMMON_FOLDERS", False),
-        grok_api_key=grok_api_key,
-        grok_model=grok_model,
-        github_token=github_token,
-        github_model=github_model,
-        openrouter_api_key=openrouter_api_key,
-        openrouter_model=openrouter_model,
-        openrouter_base_url=openrouter_base_url,
-        perplexity_api_key=perplexity_api_key,
-        perplexity_model=perplexity_model,
-        groq_api_key=groq_api_key,
-        groq_model=groq_model,
-        mistral_api_key=mistral_api_key,
-        mistral_model=mistral_model,
-        cloudflare_account_id=cloudflare_account_id,
-        cloudflare_api_token=cloudflare_api_token,
-        cloudflare_model=cloudflare_model,
-        huggingface_api_token=huggingface_api_token,
-        huggingface_model=huggingface_model,
-        glm_api_key=glm_api_key,
-        glm_model=glm_model,
-        enable_ovh=enable_ovh,
-        primary_provider=primary_provider,
         http_connect_timeout=max(1.0, _env_float("HTTP_CONNECT_TIMEOUT", 3.5)),
         http_read_timeout=max(3.0, _env_float("HTTP_READ_TIMEOUT", 12.0)),
         popup_width=max(180, _env_int("POPUP_WIDTH", 260)),
@@ -221,5 +183,4 @@ def get_config() -> Config:
 try:
     CONFIG = get_config()
 except Exception:
-    # Don't crash on import if env not set yet; will be validated when used
     CONFIG = None  # type: ignore

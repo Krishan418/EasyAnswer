@@ -528,7 +528,7 @@ def main() -> int:
         QMessageBox.information(
             None,
             APP_NAME,
-            "Screenshot AI Assistant is already running.\n"
+            f"{APP_NAME} is already running.\n"
             "Look for its icon in the system tray.",
         )
         return 0

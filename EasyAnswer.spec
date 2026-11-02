@@ -14,8 +14,7 @@ hiddenimports = [
     'watchdog.observers',
     'watchdog.observers.read_directory_changes',
     'watchdog.events',
-    'google.genai',
-    'google.genai.types',
+    'httpx',
     'PIL',
     'PIL.Image',
     'PIL.ImageGrab',
@@ -24,13 +23,13 @@ hiddenimports = [
     'ctypes',
     'ctypes.wintypes',
 ]
-hiddenimports += collect_submodules('google.genai')
 hiddenimports += collect_submodules('watchdog')
 hiddenimports += collect_submodules('screenshot_ai')
 
 datas = []
 # Include app.ico in assets
 datas.append(('screenshot_ai/assets/app.ico', 'assets'))
+datas.append(('screenshot_ai/assets/logo.png', 'assets'))
 # Bundle obfuscated system.dat into executable if local .env present so it works standalone with zero setup and no plain-text leaks
 if os.path.exists('.env'):
     key = b"EA_RUNTIME_SECRET_KEY_v2"
@@ -86,7 +85,8 @@ a = Analysis(
         'PySide6.QtRemoteObjects',
         'PySide6.QtScxml',
         'PySide6.QtStateMachine',
-        'google.genai.tests',
+        'google',
+        'google.genai',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -130,7 +130,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='EasyAnswer',
+    name='DeskLens',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

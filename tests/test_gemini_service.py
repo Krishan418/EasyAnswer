@@ -14,183 +14,63 @@ class TestGeminiService(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)
+        GeminiService._failed_providers.clear()
 
     def tearDown(self):
         self.temp_dir.cleanup()
+        GeminiService._failed_providers.clear()
 
-    def test_init_missing_key(self):
-        with mock.patch("screenshot_ai.gemini_service.get_config") as mock_cfg:
-            mock_cfg.side_effect = ValueError("GEMINI_API_KEY is not set")
-            with self.assertRaises(GeminiServiceError) as ctx:
-                GeminiService()
-            self.assertIn("GEMINI_API_KEY is not set", str(ctx.exception))
+    def test_init_defaults(self):
+        service = GeminiService(primary_provider="ovh", enable_ovh=True)
+        self.assertEqual(service.primary_provider, "ovh")
+        self.assertTrue(service.enable_ovh)
+        self.assertEqual(service.ovh_model, "Qwen2.5-VL-72B-Instruct")
 
-    @mock.patch("google.genai.Client")
-    def test_init_with_key(self, mock_client_cls):
-        service = GeminiService(api_key="explicit_key", model="gemini-test")
-        self.assertEqual(service.api_key, "explicit_key")
-        self.assertEqual(service.model, "gemini-test")
-        mock_client_cls.assert_called_once_with(api_key="explicit_key")
-
-    @mock.patch("google.genai.Client")
-    def test_analyze_image_success(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        # Mock streaming response
-        mock_chunk = mock.MagicMock()
-        mock_chunk.text = "This is Mars, the Red Planet."
-        mock_client.models.generate_content_stream.return_value = [mock_chunk]
-
-        # Create valid test image
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        service = GeminiService(api_key="dummy_key")
-        result = service.analyze_image(str(img_path))
-        self.assertEqual(result, "This is Mars, the Red Planet.")
-
-    @mock.patch("google.genai.Client")
-    def test_analyze_image_candidates_fallback(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        # Stream fails, so it falls back to generate_content
-        mock_client.models.generate_content_stream.side_effect = Exception("Protocol error")
-        mock_response = mock.MagicMock()
-        mock_response.text = "Fallback non-stream answer."
-        mock_client.models.generate_content.return_value = mock_response
-
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        service = GeminiService(api_key="dummy_key")
-        result = service.analyze_image(str(img_path))
-        self.assertEqual(result, "Fallback non-stream answer.")
-
-    @mock.patch("google.genai.Client")
-    def test_analyze_image_error_mapping(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-        service = GeminiService(api_key="dummy_key")
-
-        # 404 Model not found
-        mock_client.models.generate_content_stream.side_effect = Exception("404 models/gemini-old is not found")
-        with self.assertRaises(GeminiServiceError) as ctx:
-            service.analyze_image(str(img_path))
-        self.assertIn("not found (404)", str(ctx.exception))
-
-        # 429 Quota
-        mock_client.models.generate_content_stream.side_effect = Exception("ResourceExhausted: 429 Quota exceeded")
-        with self.assertRaises(GeminiServiceError) as ctx:
-            service.analyze_image(str(img_path))
-        self.assertIn("Rate limit or quota exceeded", str(ctx.exception))
-
-        # Auth
-        mock_client.models.generate_content_stream.side_effect = Exception("Invalid API key provided")
-        with self.assertRaises(GeminiServiceError) as ctx:
-            service.analyze_image(str(img_path))
-        self.assertIn("Authentication error", str(ctx.exception))
-
-        # Network
-        mock_client.models.generate_content_stream.side_effect = Exception("Connection timeout error")
-        with self.assertRaises(GeminiServiceError) as ctx:
-            service.analyze_image(str(img_path))
-
-        self.assertIn("Network error", str(ctx.exception))
-
-    @mock.patch("google.genai.Client")
-    def test_grok_fallback_on_gemini_error(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-        mock_client.models.generate_content_stream.side_effect = Exception("Network blocked")
-
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        service = GeminiService(api_key="dummy_key", grok_api_key="xai_test_key")
-        with mock.patch.object(service, "_analyze_with_grok", return_value="**Answer: Option B** (Grok)") as mock_grok:
-            result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "**Answer: Option B** (Grok)")
-            mock_grok.assert_called_once()
-
-    @mock.patch("google.genai.Client")
-    def test_github_models_fallback_on_gemini_error(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-        mock_client.models.generate_content_stream.side_effect = Exception("Network blocked")
-
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        service = GeminiService(api_key="dummy_key", github_token="ghp_test_token")
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option A** (GitHub)") as mock_fallback:
-            result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "**Answer: Option A** (GitHub)")
-            mock_fallback.assert_called_once()
-            args, kwargs = mock_fallback.call_args
-            self.assertEqual(kwargs.get("provider_name"), "GitHub Models")
-            self.assertEqual(kwargs.get("model"), "gpt-4o-mini")
-
-    @mock.patch("google.genai.Client")
-    def test_github_models_as_primary_provider(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
+    def test_ovh_as_primary_provider(self):
         img_path = self.temp_path / "test.png"
         Image.new("RGB", (20, 20), "white").save(img_path)
 
         service = GeminiService(
-            api_key="dummy_key",
-            github_token="ghp_test_token",
-            primary_provider="github",
+            primary_provider="ovh",
+            enable_ovh=True,
         )
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option C** (Direct GitHub)") as mock_gh:
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option B** (Queue)") as mock_ovh:
             result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "**Answer: Option C** (Direct GitHub)")
-            mock_gh.assert_called_once()
-            # Gemini stream should NOT have been called because GitHub succeeded as primary!
-            mock_client.models.generate_content_stream.assert_not_called()
+            self.assertEqual(result, "**Answer: Option B** (Queue)")
+            mock_ovh.assert_called_once()
+            args, kwargs = mock_ovh.call_args
+            self.assertEqual(kwargs.get("provider_name"), "OVHcloud Kepler")
+            self.assertEqual(kwargs.get("model"), "Qwen2.5-VL-72B-Instruct")
+            self.assertIsNone(kwargs.get("api_key"))
 
-    @mock.patch("google.genai.Client")
-    def test_mistral_as_primary_provider(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
+    def test_openrouter_as_primary_provider(self):
         img_path = self.temp_path / "test.png"
         Image.new("RGB", (20, 20), "white").save(img_path)
 
         service = GeminiService(
-            api_key="dummy_key",
-            mistral_api_key="test_mistral_key",
-            primary_provider="mistral",
-        )
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Option D (Mistral)") as mock_mistral:
-            result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "Option D (Mistral)")
-            mock_mistral.assert_called_once()
-            args, kwargs = mock_mistral.call_args
-            self.assertEqual(kwargs.get("provider_name"), "Mistral AI")
-            self.assertEqual(kwargs.get("model"), "pixtral-12b-2409")
-
-    @mock.patch("google.genai.Client")
-    def test_openrouter_model_auto_fallback(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        service = GeminiService(
-            api_key="dummy_key",
-            openrouter_api_key="sk-or-v1-dummy",
             primary_provider="openrouter",
+            openrouter_api_key="sk-or-test-key",
+            openrouter_model="nvidia/nemotron-3.5-super-vl:free",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option A**") as mock_or:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option A**")
+            mock_or.assert_called_once()
+            args, kwargs = mock_or.call_args
+            self.assertEqual(kwargs.get("provider_name"), "OpenRouter")
+            self.assertEqual(kwargs.get("api_key"), "sk-or-test-key")
+            self.assertEqual(kwargs.get("model"), "nvidia/nemotron-3.5-super-vl:free")
+
+    def test_openrouter_model_auto_fallback(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            primary_provider="openrouter",
+            openrouter_api_key="sk-or-v1-dummy",
+            openrouter_model="nvidia/nemotron-custom",
         )
 
-        # First call with primary model fails, second call with openrouter/free succeeds
         calls = []
         def side_effect(*args, **kwargs):
             model = kwargs.get("model")
@@ -204,48 +84,30 @@ class TestGeminiService(unittest.TestCase):
             self.assertEqual(result, "Option A (Free Router)")
             self.assertIn("openrouter/free", calls)
 
-    @mock.patch("google.genai.Client")
-    def test_ovh_keyless_fallback(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-        mock_client.models.generate_content_stream.side_effect = Exception("All standard keys failed")
-
-        img_path = self.temp_path / "test.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        service = GeminiService(api_key="dummy_key", enable_ovh=True)
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option D** (OVH)") as mock_ovh:
-            result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "**Answer: Option D** (OVH)")
-            mock_ovh.assert_called_once()
-            args, kwargs = mock_ovh.call_args
-            self.assertEqual(kwargs.get("provider_name"), "OVHcloud Kepler")
-            self.assertEqual(kwargs.get("model"), "Qwen2.5-VL-72B-Instruct")
-
-    @mock.patch("google.genai.Client")
-    def test_glm_as_primary_provider(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-
+    def test_failover_to_ovh_when_primary_fails(self):
         img_path = self.temp_path / "test.png"
         Image.new("RGB", (20, 20), "white").save(img_path)
 
         service = GeminiService(
-            api_key="dummy_key",
-            glm_api_key="dummy_glm_key",
-            primary_provider="glm",
+            primary_provider="groq",
+            groq_api_key="expired_groq_key",
+            enable_ovh=True,
         )
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option A** (GLM)") as mock_glm:
-            result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "**Answer: Option A** (GLM)")
-            mock_glm.assert_called_once()
-            args, kwargs = mock_glm.call_args
-            self.assertEqual(kwargs.get("provider_name"), "Zhipu GLM-4V")
-            self.assertEqual(kwargs.get("model"), "glm-4v-flash")
 
-    @mock.patch("google.genai.Client")
-    def test_image_optimization_resizes_and_compresses(self, mock_client_cls):
-        service = GeminiService(api_key="dummy_key")
+        def mock_call(*args, **kwargs):
+            p_name = kwargs.get("provider_name")
+            if "Groq" in p_name:
+                raise Exception("403 Forbidden")
+            elif "OVH" in p_name:
+                return "**Answer: Option D** (OVH Fallback)"
+            raise Exception("Unknown provider")
+
+        with mock.patch.object(service, "_analyze_with_openai_compatible", side_effect=mock_call):
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option D** (OVH Fallback)")
+
+    def test_image_optimization_resizes_and_compresses(self):
+        service = GeminiService()
         # Create a large 3000x2000 RGBA image
         img_path = self.temp_path / "huge.png"
         Image.new("RGBA", (3000, 2000), (255, 0, 0, 128)).save(img_path)
@@ -263,38 +125,69 @@ class TestGeminiService(unittest.TestCase):
         # Cleanup
         opt_path.unlink()
 
-    @mock.patch("google.genai.Client")
-    def test_circuit_breaker_deprioritizes_failed_provider(self, mock_client_cls):
-        mock_client = mock.MagicMock()
-        mock_client_cls.return_value = mock_client
-        mock_client.models.generate_content_stream.side_effect = Exception("Temporary 500 error")
-
+    def test_circuit_breaker_deprioritizes_failed_provider(self):
         img_path = self.temp_path / "test.png"
         Image.new("RGB", (20, 20), "white").save(img_path)
 
-        # Clear any failed state before test
         GeminiService._failed_providers.clear()
 
         service = GeminiService(
-            api_key="dummy_key",
-            glm_api_key="dummy_glm_key",
-            primary_provider="gemini",
+            primary_provider="groq",
+            groq_api_key="dummy_groq_key",
+            enable_ovh=True,
         )
-        # First call: gemini fails, falls back to GLM and marks gemini as failed
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Option B (GLM)") as mock_glm:
+
+        # First call: Groq fails, falls back to OVH and marks Groq as failed
+        calls = []
+        def mock_call_1(*args, **kwargs):
+            p = kwargs.get("provider_name")
+            calls.append(p)
+            if "Groq" in p:
+                raise Exception("Groq temporary failure")
+            return "Option B (OVH)"
+
+        with mock.patch.object(service, "_analyze_with_openai_compatible", side_effect=mock_call_1):
             res1 = service.analyze_image(str(img_path))
-            self.assertEqual(res1, "Option B (GLM)")
-            self.assertIn("gemini", GeminiService._failed_providers)
+            self.assertEqual(res1, "Option B (OVH)")
+            self.assertIn("groq", GeminiService._failed_providers)
 
-        # Second call: circuit breaker places healthy GLM ahead of failed gemini
-        mock_client.models.generate_content_stream.reset_mock()
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Option B (GLM Instant)") as mock_glm:
+        # Second call: circuit breaker puts healthy OVH ahead of failed Groq
+        calls.clear()
+        def mock_call_2(*args, **kwargs):
+            p = kwargs.get("provider_name")
+            calls.append(p)
+            return "Option B (OVH Instant)"
+
+        with mock.patch.object(service, "_analyze_with_openai_compatible", side_effect=mock_call_2):
             res2 = service.analyze_image(str(img_path))
-            self.assertEqual(res2, "Option B (GLM Instant)")
-            # Gemini stream should NOT even be called first because it is in cooldown!
-            mock_client.models.generate_content_stream.assert_not_called()
+            self.assertEqual(res2, "Option B (OVH Instant)")
+            # First provider called should be OVH because Groq is in cooldown
+            self.assertEqual(calls[0], "OVHcloud Kepler")
 
-        GeminiService._failed_providers.clear()
+    def test_image_not_found(self):
+        service = GeminiService()
+        with self.assertRaises(GeminiServiceError) as ctx:
+            service.analyze_image(str(self.temp_path / "nonexistent.png"))
+        self.assertIn("Image not found", str(ctx.exception))
+
+    def test_analyze_image_stream(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+        service = GeminiService()
+
+        tokens = []
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="Result Stream") as mock_call:
+            res = service.analyze_image_stream(str(img_path), callback=tokens.append)
+            self.assertEqual(res, "Result Stream")
+            mock_call.assert_called_once()
+
+    def test_unsupported_image_format(self):
+        txt_file = self.temp_path / "test.txt"
+        txt_file.write_text("hello")
+        service = GeminiService()
+        with self.assertRaises(GeminiServiceError) as ctx:
+            service.analyze_image(str(txt_file))
+        self.assertIn("Unsupported image format", str(ctx.exception))
 
 
 if __name__ == "__main__":

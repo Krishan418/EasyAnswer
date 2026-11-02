@@ -30,18 +30,15 @@ class TestConfig(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(_env_int("UNSET_INT", 4000), 4000)
 
-    def test_get_config_missing_api_key_raises(self):
-        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": ""}, clear=True):
-            with mock.patch("screenshot_ai.config._get_default_key", return_value=""):
-                with self.assertRaises(ValueError) as ctx:
-                    get_config()
-                self.assertIn("GEMINI_API_KEY is not set", str(ctx.exception))
-
-    def test_get_config_fallback_to_default_key(self):
+    def test_get_config_defaults(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            with mock.patch("screenshot_ai.config._get_default_key", return_value="fallback_key_abc"):
-                cfg = get_config()
-                self.assertEqual(cfg.gemini_api_key, "fallback_key_abc")
+            cfg = get_config()
+            self.assertEqual(cfg.primary_provider, "ovh")
+            self.assertTrue(cfg.enable_ovh)
+            self.assertEqual(cfg.ovh_model, "Qwen2.5-VL-72B-Instruct")
+            self.assertEqual(cfg.hotkey, "ctrl+shift+s")
+            self.assertEqual(cfg.auto_exit_minutes, 0)
+            self.assertTrue(cfg.auto_show_popup)
 
     def test_load_env_from_meipass(self):
         import tempfile
@@ -50,13 +47,13 @@ class TestConfig(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             env_file = Path(tmpdir) / ".env"
-            env_file.write_text("PRIMARY_PROVIDER=cloudflare\nCLOUDFLARE_ACCOUNT_ID=test_cf_id\n", encoding="utf-8")
+            env_file.write_text("PRIMARY_PROVIDER=openrouter\nOPENROUTER_MODEL=test_model\n", encoding="utf-8")
             with mock.patch.object(sys, "frozen", True, create=True):
                 with mock.patch.object(sys, "_MEIPASS", tmpdir, create=True):
                     with mock.patch.dict(os.environ, {}, clear=True):
                         _load_env()
-                        self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "cloudflare")
-                        self.assertEqual(os.getenv("CLOUDFLARE_ACCOUNT_ID"), "test_cf_id")
+                        self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "openrouter")
+                        self.assertEqual(os.getenv("OPENROUTER_MODEL"), "test_model")
 
     def test_load_env_from_obfuscated_system_dat(self):
         import tempfile
@@ -65,7 +62,7 @@ class TestConfig(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             dat_file = Path(tmpdir) / "system.dat"
-            content = b"PRIMARY_PROVIDER=glm\nGLM_MODEL=glm-4.6v\n"
+            content = b"PRIMARY_PROVIDER=ovh\nENABLE_OVH=true\n"
             key = b"EA_RUNTIME_SECRET_KEY_v2"
             obfuscated = bytes(b ^ key[i % len(key)] for i, b in enumerate(content))
             dat_file.write_bytes(obfuscated)
@@ -74,14 +71,18 @@ class TestConfig(unittest.TestCase):
                 with mock.patch.object(sys, "_MEIPASS", tmpdir, create=True):
                     with mock.patch.dict(os.environ, {}, clear=True):
                         _load_env()
-                        self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "glm")
-                        self.assertEqual(os.getenv("GLM_MODEL"), "glm-4.6v")
-
+                        self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "ovh")
+                        self.assertEqual(os.getenv("ENABLE_OVH"), "true")
 
     def test_get_config_valid(self):
         env_vars = {
-            "GEMINI_API_KEY": "test_fake_api_key_123",
-            "GEMINI_MODEL": "gemini-test-model",
+            "PRIMARY_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": "sk-or-test-key",
+            "OPENROUTER_MODEL": "nvidia/nemotron-test",
+            "GLM_API_KEY": "test-glm-key",
+            "GLM_MODEL": "glm-4.6v",
+            "GROQ_API_KEY": "gsk-test-key",
+            "GROQ_MODEL": "llama-3.2-vision",
             "HOTKEY": "ctrl+alt+a",
             "TOGGLE_HOTKEY": "ctrl+~",
             "QUIT_HOTKEY": "ctrl+shift+q",
@@ -93,13 +94,19 @@ class TestConfig(unittest.TestCase):
             "START_MINIMIZED": "true",
             "CLIPBOARD_ON_HOTKEY": "false",
             "WATCH_COMMON_FOLDERS": "true",
-            "GROK_API_KEY": "xai-test-key",
-            "GROK_MODEL": "grok-2-vision-1212",
+            "POPUP_WIDTH": "300",
+            "POPUP_HEIGHT": "100",
+            "POPUP_OPACITY": "0.85",
         }
         with mock.patch.dict(os.environ, env_vars, clear=True):
             cfg = get_config()
-            self.assertEqual(cfg.gemini_api_key, "test_fake_api_key_123")
-            self.assertEqual(cfg.gemini_model, "gemini-test-model")
+            self.assertEqual(cfg.primary_provider, "openrouter")
+            self.assertEqual(cfg.openrouter_api_key, "sk-or-test-key")
+            self.assertEqual(cfg.openrouter_model, "nvidia/nemotron-test")
+            self.assertEqual(cfg.glm_api_key, "test-glm-key")
+            self.assertEqual(cfg.glm_model, "glm-4.6v")
+            self.assertEqual(cfg.groq_api_key, "gsk-test-key")
+            self.assertEqual(cfg.groq_model, "llama-3.2-vision")
             self.assertEqual(cfg.hotkey, "ctrl+alt+a")
             self.assertEqual(cfg.toggle_hotkey, "ctrl+~")
             self.assertEqual(cfg.quit_hotkey, "ctrl+shift+q")
@@ -111,8 +118,9 @@ class TestConfig(unittest.TestCase):
             self.assertTrue(cfg.start_minimized)
             self.assertFalse(cfg.clipboard_on_hotkey)
             self.assertTrue(cfg.watch_common_folders)
-            self.assertEqual(cfg.grok_api_key, "xai-test-key")
-            self.assertEqual(cfg.grok_model, "grok-2-vision-1212")
+            self.assertEqual(cfg.popup_width, 300)
+            self.assertEqual(cfg.popup_height, 100)
+            self.assertEqual(cfg.popup_opacity, 0.85)
 
 
 if __name__ == "__main__":

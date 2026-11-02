@@ -1,51 +1,52 @@
-"""Programmatically drawn application icon.
+"""Application icon provider for DeskLens."""
 
-Drawing the icon in code keeps the repository free of binary files and means
-PyInstaller does not have to bundle an extra asset for the tray icon.
-"""
-
+import sys
+from pathlib import Path
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 
 
 def build_app_icon(size: int = 64) -> QIcon:
-    """Return the app icon (blue rounded square with a white 'AI')."""
+    """Return the DeskLens app icon from assets, or fallback to programmatically drawn icon."""
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "assets" / "app.ico")
+            candidates.append(Path(meipass) / "assets" / "logo.png")
+            candidates.append(Path(meipass) / "app.ico")
+
+    current_dir = Path(__file__).resolve().parent
+    candidates.append(current_dir / "assets" / "app.ico")
+    candidates.append(current_dir / "assets" / "logo.png")
+
+    for icon_path in candidates:
+        if icon_path.is_file():
+            icon = QIcon(str(icon_path))
+            if not icon.isNull():
+                return icon
+
+    # Fallback: sleek dark tile with cyan-teal lens circle
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-    # Rounded blue tile
+    margin = max(1.0, size * 0.04)
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor("#2563eb"))
-    margin = max(1.0, size * 0.03)
+    painter.setBrush(QColor("#0f172a"))  # Deep slate dark
     painter.drawRoundedRect(
         QRectF(margin, margin, size - 2 * margin, size - 2 * margin),
-        size * 0.24,
-        size * 0.24,
+        size * 0.22,
+        size * 0.22,
     )
 
-    # Small "screen" ring to hint at screenshots
-    ring_margin = size * 0.18
+    # Cyan ring
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.setPen(QPen(QColor(255, 255, 255, 90), max(1.0, size * 0.035)))
-    painter.drawRoundedRect(
-        QRectF(ring_margin, ring_margin, size - 2 * ring_margin, size - 2 * ring_margin),
-        size * 0.12,
-        size * 0.12,
-    )
+    painter.setPen(QPen(QColor("#00d2ff"), max(1.5, size * 0.08)))
+    ring_margin = size * 0.20
+    painter.drawEllipse(QRectF(ring_margin, ring_margin, size - 2 * ring_margin, size - 2 * ring_margin))
 
-    # Letters
-    font = QFont("Segoe UI", max(6, int(size * 0.34)))
-    font.setBold(True)
-    painter.setFont(font)
-    painter.setPen(QColor("#ffffff"))
-    painter.drawText(
-        QRectF(0, size * 0.02, size, size),
-        Qt.AlignmentFlag.AlignCenter,
-        "AI",
-    )
     painter.end()
-
     return QIcon(pixmap)
