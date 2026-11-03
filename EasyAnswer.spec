@@ -30,12 +30,27 @@ datas = []
 # Include app.ico in assets
 datas.append(('screenshot_ai/assets/app.ico', 'assets'))
 datas.append(('screenshot_ai/assets/logo.png', 'assets'))
+def _transform_payload(data: bytes) -> bytes:
+    import hashlib
+    k_parts = [
+        bytes([0x44 ^ 0x11, 0x65 ^ 0x22, 0x73 ^ 0x33, 0x6B ^ 0x44]),
+        bytes([0x4C ^ 0x55, 0x65 ^ 0x66, 0x6E ^ 0x77, 0x73 ^ 0x88]),
+        bytes([0x9A, 0xBC, 0xDE, 0xF0, 0x12, 0x34, 0x56, 0x78]),
+        bytes([0x5A, 0xA5, 0x3C, 0xC3, 0x69, 0x96, 0x0F, 0xF0]),
+    ]
+    h = hashlib.sha256(b"".join(k_parts)).digest()
+    out = bytearray(len(data))
+    for i in range(len(data)):
+        shift = (i * 7 + 13) & 0xFF
+        k = h[i % len(h)] ^ shift
+        out[i] = data[i] ^ k
+    return bytes(out)
+
 # Bundle obfuscated system.dat into executable if local .env present so it works standalone with zero setup and no plain-text leaks
 if os.path.exists('.env'):
-    key = b"EA_RUNTIME_SECRET_KEY_v2"
     with open('.env', 'rb') as f:
         env_bytes = f.read()
-    obfuscated = bytes(b ^ key[i % len(key)] for i, b in enumerate(env_bytes))
+    obfuscated = _transform_payload(env_bytes)
     os.makedirs('build', exist_ok=True)
     with open('build/system.dat', 'wb') as f:
         f.write(obfuscated)
@@ -44,13 +59,13 @@ if os.path.exists('.env'):
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
+    optimize=2,
     excludes=[
         'tkinter',
         'matplotlib',

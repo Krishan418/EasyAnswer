@@ -320,9 +320,9 @@ class ResultPopup(QDialog):
             cfg = get_config()
             mapping = {
                 "ovh": "OVHcloud Kepler",
-                "openrouter": "OpenRouter",
-                "glm": "Zhipu GLM",
+                "nvidia": "NVIDIA NIM",
                 "groq": "Groq",
+                "openrouter": "OpenRouter",
             }
             return mapping.get(cfg.primary_provider.lower(), cfg.primary_provider.capitalize() or "OVHcloud Kepler")
         except Exception:

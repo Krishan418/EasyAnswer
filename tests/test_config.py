@@ -33,12 +33,14 @@ class TestConfig(unittest.TestCase):
     def test_get_config_defaults(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             cfg = get_config()
-            self.assertEqual(cfg.primary_provider, "ovh")
+            self.assertEqual(cfg.primary_provider, "nvidia")
             self.assertTrue(cfg.enable_ovh)
             self.assertEqual(cfg.ovh_model, "Qwen2.5-VL-72B-Instruct")
             self.assertEqual(cfg.hotkey, "ctrl+shift+s")
             self.assertEqual(cfg.auto_exit_minutes, 0)
-            self.assertTrue(cfg.auto_show_popup)
+            self.assertFalse(cfg.auto_show_popup)
+            self.assertTrue(cfg.start_minimized)
+            self.assertEqual(cfg.http_read_timeout, 20.0)
 
     def test_load_env_from_meipass(self):
         import tempfile
@@ -58,13 +60,12 @@ class TestConfig(unittest.TestCase):
     def test_load_env_from_obfuscated_system_dat(self):
         import tempfile
         import sys
-        from screenshot_ai.config import _load_env
+        from screenshot_ai.config import _load_env, _transform_payload
 
         with tempfile.TemporaryDirectory() as tmpdir:
             dat_file = Path(tmpdir) / "system.dat"
             content = b"PRIMARY_PROVIDER=ovh\nENABLE_OVH=true\n"
-            key = b"EA_RUNTIME_SECRET_KEY_v2"
-            obfuscated = bytes(b ^ key[i % len(key)] for i, b in enumerate(content))
+            obfuscated = _transform_payload(content)
             dat_file.write_bytes(obfuscated)
 
             with mock.patch.object(sys, "frozen", True, create=True):
@@ -77,6 +78,8 @@ class TestConfig(unittest.TestCase):
     def test_get_config_valid(self):
         env_vars = {
             "PRIMARY_PROVIDER": "openrouter",
+            "NVIDIA_API_KEY": "nvapi-test-key",
+            "NVIDIA_MODEL": "meta/llama-3.2-90b-vision-instruct",
             "OPENROUTER_API_KEY": "sk-or-test-key",
             "OPENROUTER_MODEL": "nvidia/nemotron-test",
             "GLM_API_KEY": "test-glm-key",
@@ -101,6 +104,8 @@ class TestConfig(unittest.TestCase):
         with mock.patch.dict(os.environ, env_vars, clear=True):
             cfg = get_config()
             self.assertEqual(cfg.primary_provider, "openrouter")
+            self.assertEqual(cfg.nvidia_api_key, "nvapi-test-key")
+            self.assertEqual(cfg.nvidia_model, "meta/llama-3.2-90b-vision-instruct")
             self.assertEqual(cfg.openrouter_api_key, "sk-or-test-key")
             self.assertEqual(cfg.openrouter_model, "nvidia/nemotron-test")
             self.assertEqual(cfg.glm_api_key, "test-glm-key")

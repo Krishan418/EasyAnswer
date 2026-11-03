@@ -153,7 +153,8 @@ class ApplicationController:
                 "You can still open the window from the tray icon."
             )
             print(f"[hotkey] {message}", file=sys.stderr)
-            QMessageBox.warning(None, "Shortcut not available", message)
+            if self.config.show_tray_icon and self.config.auto_show_popup:
+                QMessageBox.warning(None, "Shortcut not available", message)
 
         if getattr(self.config, "toggle_hotkey", None):
             try:
@@ -195,7 +196,7 @@ class ApplicationController:
         if self._custom_folder or self._common_enabled:
             self._apply_watch_set(announce=False)
 
-        if not self.config.start_minimized:
+        if not self.config.start_minimized and self.config.auto_show_popup:
             self.open_popup()
 
         hint = f"Press {self.config.toggle_hotkey} to toggle, or {self.config.hotkey} after a snip."
@@ -235,20 +236,29 @@ class ApplicationController:
         """Clipboard-first action: analyze a copied snip, else open the window."""
         self._reset_idle_timer()
         if self.popup.is_busy:
-            self.open_popup()
+            if self.config.auto_show_popup:
+                self.open_popup()
             return
 
         if self.config.clipboard_on_hotkey:
             clipboard_image = self._read_clipboard_image(silent=True)
             if clipboard_image:
-                self.popup.show_and_analyze(
-                    clipboard_image,
-                    source_label="Clipboard image",
-                    cleanup_after=True,
-                )
+                if self.config.auto_show_popup:
+                    self.popup.show_and_analyze(
+                        clipboard_image,
+                        source_label="Clipboard image",
+                        cleanup_after=True,
+                    )
+                else:
+                    self.popup.analyze_file(
+                        clipboard_image,
+                        source_label="Clipboard image",
+                        cleanup_after=True,
+                    )
                 return
 
-        self.open_popup()
+        if self.config.auto_show_popup:
+            self.open_popup()
 
     def choose_screenshot(self) -> None:
         self._reset_idle_timer()
@@ -278,11 +288,18 @@ class ApplicationController:
             )
             return
 
-        self.popup.show_and_analyze(
-            clipboard_image,
-            source_label="Clipboard image",
-            cleanup_after=True,
-        )
+        if self.config.auto_show_popup:
+            self.popup.show_and_analyze(
+                clipboard_image,
+                source_label="Clipboard image",
+                cleanup_after=True,
+            )
+        else:
+            self.popup.analyze_file(
+                clipboard_image,
+                source_label="Clipboard image",
+                cleanup_after=True,
+            )
 
     def _read_clipboard_image(self, silent: bool) -> Optional[str]:
         try:
@@ -509,6 +526,21 @@ class ApplicationController:
         self.app.quit()
 
 
+def _check_debugger_present() -> bool:
+    """Anti-analysis check: return True if running under a debugger."""
+    try:
+        kernel32 = ctypes.windll.kernel32
+        if kernel32.IsDebuggerPresent():
+            return True
+        remote = ctypes.c_bool(False)
+        if kernel32.CheckRemoteDebuggerPresent(kernel32.GetCurrentProcess(), ctypes.byref(remote)):
+            if remote.value:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _single_instance_guard() -> bool:
     """Return False when another copy is already running."""
     global _mutex_handle
@@ -521,16 +553,15 @@ def _single_instance_guard() -> bool:
 
 
 def main() -> int:
+    # Anti-analysis & debugging guard: quietly exit if under a debugger
+    if _check_debugger_present():
+        return 0
+
     app = create_app(quit_on_last_window_closed=False)
     app.setWindowIcon(build_app_icon())
 
     if not _single_instance_guard():
-        QMessageBox.information(
-            None,
-            APP_NAME,
-            f"{APP_NAME} is already running.\n"
-            "Look for its icon in the system tray.",
-        )
+        # Silent exit in stealth mode without revealing application identity
         return 0
 
     try:

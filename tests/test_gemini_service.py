@@ -84,6 +84,24 @@ class TestGeminiService(unittest.TestCase):
             self.assertEqual(result, "Option A (Free Router)")
             self.assertIn("openrouter/free", calls)
 
+    def test_nvidia_as_primary_provider(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            primary_provider="nvidia",
+            nvidia_api_key="nvapi-test-key",
+            nvidia_model="meta/llama-3.2-90b-vision-instruct",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option B** (NVIDIA 90B)") as mock_nv:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option B** (NVIDIA 90B)")
+            mock_nv.assert_called_once()
+            args, kwargs = mock_nv.call_args
+            self.assertEqual(kwargs.get("provider_name"), "NVIDIA NIM (90B Vision)")
+            self.assertEqual(kwargs.get("api_key"), "nvapi-test-key")
+            self.assertEqual(kwargs.get("model"), "meta/llama-3.2-90b-vision-instruct")
+
     def test_failover_to_ovh_when_primary_fails(self):
         img_path = self.temp_path / "test.png"
         Image.new("RGB", (20, 20), "white").save(img_path)
@@ -188,6 +206,21 @@ class TestGeminiService(unittest.TestCase):
         with self.assertRaises(GeminiServiceError) as ctx:
             service.analyze_image(str(txt_file))
         self.assertIn("Unsupported image format", str(ctx.exception))
+
+    def test_all_net_failed_clean_error(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+        service = GeminiService(primary_provider="nvidia", nvidia_api_key="key", enable_ovh=True)
+
+        def mock_offline(*args, **kwargs):
+            raise GeminiServiceError("Network error: Unable to resolve (getaddrinfo failed)")
+
+        with mock.patch.object(service, "_analyze_with_openai_compatible", side_effect=mock_offline):
+            with self.assertRaises(GeminiServiceError) as ctx:
+                service.analyze_image(str(img_path))
+            self.assertIn("No Internet Connection", str(ctx.exception))
+            # Circuit breaker should be reset
+            self.assertEqual(len(service._failed_providers), 0)
 
 
 if __name__ == "__main__":

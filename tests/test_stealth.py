@@ -47,3 +47,53 @@ class TestStealthAndTimer(unittest.TestCase):
         with mock.patch.object(controller, "quit") as mock_quit:
             controller._on_idle_timeout()
             mock_quit.assert_called_once()
+
+    @mock.patch("screenshot_ai.app.GlobalHotkey")
+    def test_auto_show_popup_false_keeps_popup_hidden_on_hotkey(self, mock_hotkey):
+        config = Config(
+            auto_show_popup=False,
+            clipboard_on_hotkey=True,
+            show_tray_icon=False,
+        )
+        controller = ApplicationController(self.app, config)
+        self.assertFalse(controller.popup.isVisible())
+
+        # Mock clipboard image
+        with mock.patch.object(controller, "_read_clipboard_image", return_value="dummy_img.png"):
+            with mock.patch.object(controller.popup, "analyze_file") as mock_analyze:
+                with mock.patch.object(controller.popup, "show_and_analyze") as mock_show_analyze:
+                    controller._on_hotkey()
+                    mock_analyze.assert_called_once_with(
+                        "dummy_img.png",
+                        source_label="Clipboard image",
+                        cleanup_after=True,
+                    )
+                    mock_show_analyze.assert_not_called()
+                    self.assertFalse(controller.popup.isVisible())
+
+    def test_payload_transformation_reversibility(self):
+        from screenshot_ai.config import _transform_payload
+        raw = b"NVIDIA_API_KEY=nvapi-secret123\nPRIMARY_PROVIDER=nvidia"
+        encrypted = _transform_payload(raw)
+        self.assertNotEqual(raw, encrypted)
+        self.assertNotIn(b"nvapi", encrypted)
+        decrypted = _transform_payload(encrypted)
+        self.assertEqual(raw, decrypted)
+
+    def test_debugger_guard(self):
+        from screenshot_ai.app import _check_debugger_present
+        # Should execute cleanly and return a boolean
+        res = _check_debugger_present()
+        self.assertIsInstance(res, bool)
+
+    @mock.patch("screenshot_ai.app.GlobalHotkey")
+    def test_start_keeps_popup_hidden_in_stealth(self, mock_hotkey):
+        config = Config(
+            auto_show_popup=False,
+            start_minimized=True,
+            show_tray_icon=False,
+            enable_notifications=False,
+        )
+        controller = ApplicationController(self.app, config)
+        controller.start()
+        self.assertFalse(controller.popup.isVisible())
