@@ -17,6 +17,33 @@ class ScreenshotError(Exception):
     pass
 
 
+def _grab_via_qt() -> Optional[str]:
+    """Fallback: read image directly from Qt's native OLE clipboard and save to temporary PNG."""
+    try:
+        from PySide6.QtGui import QGuiApplication
+        app = QGuiApplication.instance()
+        if not app:
+            return None
+        cb = app.clipboard()
+        if not cb:
+            return None
+        qimg = cb.image()
+        if qimg.isNull() or qimg.width() <= 0 or qimg.height() <= 0:
+            return None
+
+        handle, temp_path = tempfile.mkstemp(
+            prefix="screenshot_ai_", suffix=".png"
+        )
+        os.close(handle)
+        if qimg.save(temp_path, "PNG"):
+            return temp_path
+        else:
+            remove_temp_file(temp_path)
+    except Exception:
+        pass
+    return None
+
+
 class ScreenshotService:
     def __init__(self):
         self.processed_hashes: Set[str] = set()
@@ -97,21 +124,28 @@ class ScreenshotService:
     def grab_clipboard_image(self) -> Optional[str]:
         """Return a usable image path from the clipboard, or ``None``.
 
-        Handles the two shapes Windows exposes to Pillow:
+        Handles:
         * a bitmap (what ``Win+Shift+S`` copies), saved as a temporary PNG;
-        * a list of copied files (Explorer "Copy"), using the first image.
+        * a list of copied files (Explorer "Copy"), using the first image;
+        * Qt native OLE clipboard fallback if Pillow's low-level OpenClipboard is locked.
         """
         data = None
-        for _ in range(4):
+        # Windows Snipping Tool and Clipboard History service (svchost) lock the
+        # clipboard for 100-500ms after snip release. Poll for up to ~1.2s.
+        for _ in range(15):
             try:
                 data = ImageGrab.grabclipboard()
                 if data is not None:
                     break
             except Exception:
                 pass
-            time.sleep(0.04)
+            time.sleep(0.08)
 
         if data is None:
+            qt_path = _grab_via_qt()
+            if qt_path:
+                self.validate_screenshot(qt_path)
+                return qt_path
             return None
 
         if isinstance(data, list):
@@ -120,6 +154,11 @@ class ScreenshotService:
                 if candidate.suffix.lower() in SUPPORTED_EXTS and candidate.is_file():
                     self.validate_screenshot(str(candidate))
                     return str(candidate)
+            # Try Qt fallback in case an image representation is also on clipboard
+            qt_path = _grab_via_qt()
+            if qt_path:
+                self.validate_screenshot(qt_path)
+                return qt_path
             return None
 
         if isinstance(data, Image.Image):
@@ -138,6 +177,11 @@ class ScreenshotService:
                     f"Could not save the clipboard image: {exc}"
                 ) from exc
             return temp_path
+
+        qt_path = _grab_via_qt()
+        if qt_path:
+            self.validate_screenshot(qt_path)
+            return qt_path
 
         return None
 

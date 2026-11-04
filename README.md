@@ -33,14 +33,14 @@ Built with **stealth-first architecture**, DeskLens runs 100% invisibly in the b
 * **Silent Error Handling:** Catches shortcut conflicts and connection blips silently without generating desktop warning boxes.
 
 ### 🧠 2. Resilient Multi-Cloud Vision AI Chain
-DeskLens incorporates an intelligent 4-tier cascading failover system with automatic circuit breaking:
+DeskLens incorporates an intelligent multi-cloud cascading failover system with automatic circuit breaking:
 
 | Priority | Provider | Model | Highlights |
 |:---:|:---|:---|:---|
-| **Main** | **NVIDIA NIM** | `meta/llama-3.2-90b-vision-instruct` | Flagship 90B reasoning on DGX TensorRT-LLM cloud; 1,000 free inference credits. |
-| **1st Backup** | **OVHcloud Kepler** | `Qwen2.5-VL-72B-Instruct` | 100% Free & Keyless European cloud; unmatched OCR, table, and small math formula accuracy. Unblocked on campus/lab firewalls. |
-| **2nd Backup** | **Groq Cloud** | `llama-3.2-11b-vision-preview` | Ultra-fast LPU inference fallback. |
-| **3rd Backup** | **OpenRouter** | `nvidia/nemotron-3.5-super-vl:free` | Universal router fallback (`openrouter/free`). |
+| **Main** | **Google Gemini** | `gemini-3-flash-preview` | 1,500 Free Requests daily, 95%+ MCQ accuracy, unblocked on campus/lab firewalls. |
+| **1st Backup** | **Cloudflare Workers AI** | `@cf/meta/llama-3.2-11b-vision-instruct` | 10,000 Free Neurons daily, zero credit card requirement, unblocked everywhere. |
+| **2nd Backup** | **OVHcloud Kepler** | `Qwen2.5-VL-72B-Instruct` | 100% Free & Keyless European cloud safety net; unmatched OCR, table, and small math formula accuracy. |
+| **3rd Backup** | **NVIDIA NIM** | `meta/llama-3.2-11b-vision-instruct` | Fast 11B vision on DGX TensorRT-LLM cloud. |
 
 * **Circuit Breaker Engine:** If any provider encounters a rate limit (HTTP 429), timeout, or server downtime, it is placed on a cooldown period while healthy providers are routed immediately without slowing down the user.
 * **Smart Offline Detection:** If Wi-Fi or Ethernet drops, the circuit breaker resets automatically so that the moment your network reconnects, your primary provider is queried immediately.

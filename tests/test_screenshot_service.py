@@ -88,6 +88,29 @@ class TestScreenshotService(unittest.TestCase):
         remove_temp_file(str(other_file))
         self.assertTrue(other_file.exists())
 
+    def test_grab_clipboard_image_pillow_image(self):
+        test_img = Image.new("RGB", (30, 30), color="green")
+        with unittest.mock.patch("screenshot_ai.screenshot_service.ImageGrab.grabclipboard", return_value=test_img):
+            path = self.service.grab_clipboard_image()
+            self.assertIsNotNone(path)
+            self.assertTrue(Path(path).exists())
+            remove_temp_file(path)
+
+    def test_grab_clipboard_image_file_list(self):
+        img_path = self.temp_path / "copied.png"
+        Image.new("RGB", (20, 20), color="blue").save(img_path)
+        with unittest.mock.patch("screenshot_ai.screenshot_service.ImageGrab.grabclipboard", return_value=[str(img_path)]):
+            path = self.service.grab_clipboard_image()
+            self.assertEqual(path, str(img_path))
+
+    def test_grab_clipboard_image_qt_fallback(self):
+        # Simulate Pillow failing/returning None, but Qt fallback returning a path
+        fake_qt_path = self.temp_path / "screenshot_ai_fallback.png"
+        Image.new("RGB", (20, 20), color="yellow").save(fake_qt_path)
+        with unittest.mock.patch("screenshot_ai.screenshot_service.ImageGrab.grabclipboard", return_value=None), \
+             unittest.mock.patch("screenshot_ai.screenshot_service._grab_via_qt", return_value=str(fake_qt_path)):
+            path = self.service.grab_clipboard_image()
+            self.assertEqual(path, str(fake_qt_path))
 
 
 if __name__ == "__main__":

@@ -33,14 +33,17 @@ class TestConfig(unittest.TestCase):
     def test_get_config_defaults(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             cfg = get_config()
-            self.assertEqual(cfg.primary_provider, "nvidia")
+            self.assertEqual(cfg.primary_provider, "gemini")
+            self.assertIsNone(cfg.cloudflare_account_id)
+            self.assertIsNone(cfg.cloudflare_api_token)
+            self.assertEqual(cfg.cloudflare_model, "@cf/meta/llama-3.2-11b-vision-instruct")
             self.assertTrue(cfg.enable_ovh)
             self.assertEqual(cfg.ovh_model, "Qwen2.5-VL-72B-Instruct")
             self.assertEqual(cfg.hotkey, "ctrl+shift+s")
             self.assertEqual(cfg.auto_exit_minutes, 0)
             self.assertFalse(cfg.auto_show_popup)
             self.assertTrue(cfg.start_minimized)
-            self.assertEqual(cfg.http_read_timeout, 20.0)
+            self.assertEqual(cfg.http_read_timeout, 45.0)
 
     def test_load_env_from_meipass(self):
         import tempfile
@@ -75,6 +78,32 @@ class TestConfig(unittest.TestCase):
                         self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "ovh")
                         self.assertEqual(os.getenv("ENABLE_OVH"), "true")
 
+    def test_load_env_external_exe_override(self):
+        import tempfile
+        import sys
+        from screenshot_ai.config import _load_env, _transform_payload
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Simulate bundled system.dat
+            dat_file = Path(tmpdir) / "system.dat"
+            obfuscated = _transform_payload(b"PRIMARY_PROVIDER=bundled_val\n")
+            dat_file.write_bytes(obfuscated)
+
+            # Simulate external .env next to sys.executable
+            exe_dir = Path(tmpdir) / "app_bin"
+            exe_dir.mkdir()
+            fake_exe = exe_dir / "DeskLens.exe"
+            fake_exe.touch()
+            ext_env = exe_dir / ".env"
+            ext_env.write_text("PRIMARY_PROVIDER=external_override\n", encoding="utf-8")
+
+            with mock.patch.object(sys, "frozen", True, create=True):
+                with mock.patch.object(sys, "executable", str(fake_exe)):
+                    with mock.patch.object(sys, "_MEIPASS", tmpdir, create=True):
+                        with mock.patch.dict(os.environ, {}, clear=True):
+                            _load_env()
+                            self.assertEqual(os.getenv("PRIMARY_PROVIDER"), "external_override")
+
     def test_get_config_valid(self):
         env_vars = {
             "PRIMARY_PROVIDER": "openrouter",
@@ -82,8 +111,8 @@ class TestConfig(unittest.TestCase):
             "NVIDIA_MODEL": "meta/llama-3.2-90b-vision-instruct",
             "OPENROUTER_API_KEY": "sk-or-test-key",
             "OPENROUTER_MODEL": "nvidia/nemotron-test",
-            "GLM_API_KEY": "test-glm-key",
-            "GLM_MODEL": "glm-4.6v",
+            "GEMINI_API_KEY": "test-gemini-key",
+            "GEMINI_MODEL": "gemini-3-flash-preview",
             "GROQ_API_KEY": "gsk-test-key",
             "GROQ_MODEL": "llama-3.2-vision",
             "HOTKEY": "ctrl+alt+a",
@@ -108,8 +137,8 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(cfg.nvidia_model, "meta/llama-3.2-90b-vision-instruct")
             self.assertEqual(cfg.openrouter_api_key, "sk-or-test-key")
             self.assertEqual(cfg.openrouter_model, "nvidia/nemotron-test")
-            self.assertEqual(cfg.glm_api_key, "test-glm-key")
-            self.assertEqual(cfg.glm_model, "glm-4.6v")
+            self.assertEqual(cfg.gemini_api_key, "test-gemini-key")
+            self.assertEqual(cfg.gemini_model, "gemini-3-flash-preview")
             self.assertEqual(cfg.groq_api_key, "gsk-test-key")
             self.assertEqual(cfg.groq_model, "llama-3.2-vision")
             self.assertEqual(cfg.hotkey, "ctrl+alt+a")

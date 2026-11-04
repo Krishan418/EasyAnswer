@@ -143,18 +143,25 @@ class AnalysisWorker(QThread):
         self.image_path = image_path
         self.service = service
 
+    def _safe_emit_chunk(self, chunk: str) -> None:
+        if not self.isInterruptionRequested():
+            self.chunk_received.emit(chunk)
+
     def run(self) -> None:
         try:
             service = self.service or GeminiService()
             result = service.analyze_image_stream(
                 self.image_path,
-                callback=self.chunk_received.emit,
+                callback=self._safe_emit_chunk,
             )
-            self.finished_ok.emit(result)
+            if not self.isInterruptionRequested():
+                self.finished_ok.emit(result)
         except GeminiServiceError as exc:
-            self.failed.emit(str(exc))
+            if not self.isInterruptionRequested():
+                self.failed.emit(str(exc))
         except Exception as exc:  # noqa: BLE001 - surface anything to the UI
-            self.failed.emit(f"Unexpected error: {exc}")
+            if not self.isInterruptionRequested():
+                self.failed.emit(f"Unexpected error: {exc}")
 
 
 class ResultPopup(QDialog):
@@ -319,8 +326,12 @@ class ResultPopup(QDialog):
             from .config import get_config
             cfg = get_config()
             mapping = {
+                "gemini": "Google Gemini",
+                "cloudflare": "Cloudflare Workers AI",
                 "ovh": "OVHcloud Kepler",
                 "nvidia": "NVIDIA NIM",
+                "mistral": "Mistral AI",
+                "github": "GitHub Models",
                 "groq": "Groq",
                 "openrouter": "OpenRouter",
             }
@@ -385,7 +396,30 @@ class ResultPopup(QDialog):
         cleanup_after: bool = False,
     ) -> None:
         if self._worker is not None and self._worker.isRunning():
-            return
+            # Gracefully cancel/detach previous worker so new screenshots preempt immediately
+            old_worker = self._worker
+            self._worker = None
+            try:
+                old_worker.chunk_received.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                old_worker.finished_ok.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                old_worker.failed.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                old_worker.finished.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            old_worker.requestInterruption()
+            _ORPHANED_WORKERS.append(old_worker)
+            _register_hard_exit()
+            if self._cleanup_after and self._current_image:
+                remove_temp_file(self._current_image)
 
         try:
             screenshot_service.validate_screenshot(file_path)
@@ -486,6 +520,9 @@ class ResultPopup(QDialog):
 
     @Slot()
     def _on_worker_finished(self) -> None:
+        sender = self.sender()
+        if self._worker is not None and sender is not self._worker:
+            return
         self._worker = None
         self._set_busy(False)
         self.copy_button.setEnabled(bool(self._last_result))

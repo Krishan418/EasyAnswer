@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 
 
 def build_app_icon(size: int = 64) -> QIcon:

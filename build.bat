@@ -34,12 +34,12 @@ if errorlevel 1 (
 
 echo [3/3] Preparing distribution folder...
 if not exist "dist\" mkdir dist
-copy /y "screenshot_ai\.env.example" "dist\.env.example" >nul
+copy /y ".env.example" "dist\.env.example" >nul
 
 echo ========================================================
 echo [SUCCESS] Build completed successfully!
-echo Executable is ready at: dist\EasyAnswer.exe
+echo Executable is ready at: dist\DeskLens.exe
 echo.
-echo NOTE: Make sure to create a .env file next to EasyAnswer.exe
+echo NOTE: Make sure to create a .env file next to DeskLens.exe
 echo       with your GEMINI_API_KEY before running.
 echo ========================================================

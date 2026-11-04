@@ -55,3 +55,25 @@ class TestPopup(unittest.TestCase):
         worker.run()
 
         self.assertEqual(chunks, ["Option A"])
+
+    def test_preemption_when_new_analysis_starts(self):
+        popup = ResultPopup()
+        mock_worker1 = mock.MagicMock()
+        mock_worker1.isRunning.return_value = True
+
+        popup._worker = mock_worker1
+        popup._current_image = "old.png"
+        popup._cleanup_after = False
+
+        with mock.patch("screenshot_ai.popup.AnalysisWorker") as MockWorkerClass, \
+             mock.patch("screenshot_ai.popup.screenshot_service.validate_screenshot"):
+            new_worker = mock.MagicMock()
+            MockWorkerClass.return_value = new_worker
+
+            popup.analyze_file("new.png")
+
+            # Old worker should have its signals disconnected, interruption requested, and detached
+            mock_worker1.requestInterruption.assert_called_once()
+            # New worker should be created and started
+            new_worker.start.assert_called_once()
+            self.assertEqual(popup._current_image, "new.png")

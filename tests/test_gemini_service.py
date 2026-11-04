@@ -7,6 +7,7 @@ from PIL import Image
 from screenshot_ai.gemini_service import (
     GeminiService,
     GeminiServiceError,
+    analyze_image,
 )
 
 
@@ -25,6 +26,25 @@ class TestGeminiService(unittest.TestCase):
         self.assertEqual(service.primary_provider, "ovh")
         self.assertTrue(service.enable_ovh)
         self.assertEqual(service.ovh_model, "Qwen2.5-VL-72B-Instruct")
+
+    def test_cloudflare_as_primary_provider(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            primary_provider="cloudflare",
+            cloudflare_account_id="test_acc_123",
+            cloudflare_api_token="test_token_456",
+            cloudflare_model="@cf/meta/llama-3.2-11b-vision-instruct",
+        )
+        with mock.patch.object(service, "_analyze_with_cloudflare", return_value="**Answer: Option C**") as mock_cf:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option C**")
+            mock_cf.assert_called_once()
+            args, kwargs = mock_cf.call_args
+            self.assertEqual(kwargs.get("model"), "@cf/meta/llama-3.2-11b-vision-instruct")
+            self.assertEqual(kwargs.get("api_token"), "test_token_456")
+            self.assertEqual(kwargs.get("account_id"), "test_acc_123")
 
     def test_ovh_as_primary_provider(self):
         img_path = self.temp_path / "test.png"
@@ -91,16 +111,78 @@ class TestGeminiService(unittest.TestCase):
         service = GeminiService(
             primary_provider="nvidia",
             nvidia_api_key="nvapi-test-key",
-            nvidia_model="meta/llama-3.2-90b-vision-instruct",
+            nvidia_model="meta/llama-3.2-11b-vision-instruct",
         )
-        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option B** (NVIDIA 90B)") as mock_nv:
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option B** (NVIDIA 11B)") as mock_nv:
             result = service.analyze_image(str(img_path))
-            self.assertEqual(result, "**Answer: Option B** (NVIDIA 90B)")
+            self.assertEqual(result, "**Answer: Option B** (NVIDIA 11B)")
             mock_nv.assert_called_once()
             args, kwargs = mock_nv.call_args
-            self.assertEqual(kwargs.get("provider_name"), "NVIDIA NIM (90B Vision)")
+            self.assertEqual(kwargs.get("provider_name"), "NVIDIA NIM (11B Vision)")
             self.assertEqual(kwargs.get("api_key"), "nvapi-test-key")
-            self.assertEqual(kwargs.get("model"), "meta/llama-3.2-90b-vision-instruct")
+            self.assertEqual(kwargs.get("model"), "meta/llama-3.2-11b-vision-instruct")
+
+    def test_gemini_as_primary_provider(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            primary_provider="gemini",
+            gemini_api_key="AIzaSy-test-key",
+            gemini_model="gemini-2.5-flash",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option C** (Gemini 2.5)") as mock_gemini:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option C** (Gemini 2.5)")
+            mock_gemini.assert_called_once()
+            args, kwargs = mock_gemini.call_args
+            self.assertIn("Google Gemini", kwargs.get("provider_name"))
+            self.assertEqual(kwargs.get("api_key"), "AIzaSy-test-key")
+            self.assertEqual(kwargs.get("model"), "gemini-2.5-flash")
+
+    def test_github_as_provider(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            primary_provider="github",
+            github_token="ghp_test_token_123",
+            github_model="gpt-4o-mini",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option A** (GitHub)") as mock_gh:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option A** (GitHub)")
+            mock_gh.assert_called_once()
+            args, kwargs = mock_gh.call_args
+            self.assertIn("GitHub Models", kwargs.get("provider_name"))
+            self.assertEqual(kwargs.get("api_key"), "ghp_test_token_123")
+            self.assertEqual(kwargs.get("model"), "gpt-4o-mini")
+
+    def test_module_level_analyze_image(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        with mock.patch.object(GeminiService, "analyze_screenshot", return_value="**Answer: Option A** (Module)") as mock_method:
+            result = analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option A** (Module)")
+            mock_method.assert_called_once()
+
+    def test_mistral_as_provider(self):
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        service = GeminiService(
+            primary_provider="mistral",
+            mistral_api_key="mistral-test-key",
+            mistral_model="pixtral-12b-2409",
+        )
+        with mock.patch.object(service, "_analyze_with_openai_compatible", return_value="**Answer: Option B** (Mistral)") as mock_mistral:
+            result = service.analyze_image(str(img_path))
+            self.assertEqual(result, "**Answer: Option B** (Mistral)")
+            mock_mistral.assert_called_once()
+            args, kwargs = mock_mistral.call_args
+            self.assertIn("Mistral AI", kwargs.get("provider_name"))
+            self.assertEqual(kwargs.get("api_key"), "mistral-test-key")
 
     def test_failover_to_ovh_when_primary_fails(self):
         img_path = self.temp_path / "test.png"
@@ -152,6 +234,10 @@ class TestGeminiService(unittest.TestCase):
         service = GeminiService(
             primary_provider="groq",
             groq_api_key="dummy_groq_key",
+            gemini_api_key="",
+            cloudflare_account_id="",
+            cloudflare_api_token="",
+            nvidia_api_key="",
             enable_ovh=True,
         )
 
@@ -221,6 +307,47 @@ class TestGeminiService(unittest.TestCase):
             self.assertIn("No Internet Connection", str(ctx.exception))
             # Circuit breaker should be reset
             self.assertEqual(len(service._failed_providers), 0)
+
+    def test_concise_prompt_and_max_tokens_payload(self):
+        import base64
+        from screenshot_ai.gemini_service import _dec_str, _PROMPT_B64
+        decoded_prompt = _dec_str(base64.b64decode(_PROMPT_B64))
+        self.assertIn("verify each option against the question", decoded_prompt)
+        self.assertIn("ONE sentence", decoded_prompt)
+        self.assertIn("ultra-short and exact", decoded_prompt)
+
+        # Test that _analyze_with_openai_compatible sets max_tokens = 120
+        img_path = self.temp_path / "test.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+        service = GeminiService(primary_provider="nvidia", nvidia_api_key="nvapi-test", enable_ovh=False)
+
+        captured_payloads = []
+        mock_resp = mock.MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = [
+            'data: {"choices": [{"delta": {"content": "**Answer: Option A**"}}]}',
+            "data: [DONE]",
+        ]
+
+        cm = mock.MagicMock()
+        cm.__enter__.return_value = mock_resp
+        cm.__exit__.return_value = None
+
+        mock_client = mock.MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.__exit__.return_value = None
+
+        def fake_stream(method, url, **kwargs):
+            captured_payloads.append(kwargs.get("json"))
+            return cm
+
+        mock_client.stream.side_effect = fake_stream
+
+        with mock.patch("httpx.Client", return_value=mock_client):
+            res = service.analyze_image(str(img_path))
+            self.assertEqual(res, "**Answer: Option A**")
+            self.assertTrue(len(captured_payloads) > 0)
+            self.assertEqual(captured_payloads[0].get("max_tokens"), 600)
 
 
 if __name__ == "__main__":

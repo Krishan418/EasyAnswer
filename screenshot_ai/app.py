@@ -235,10 +235,6 @@ class ApplicationController:
     def _on_hotkey(self) -> None:
         """Clipboard-first action: analyze a copied snip, else open the window."""
         self._reset_idle_timer()
-        if self.popup.is_busy:
-            if self.config.auto_show_popup:
-                self.open_popup()
-            return
 
         if self.config.clipboard_on_hotkey:
             clipboard_image = self._read_clipboard_image(silent=True)
@@ -257,6 +253,12 @@ class ApplicationController:
                     )
                 return
 
+        # If no new clipboard image was found:
+        if self.popup.is_busy:
+            if self.config.auto_show_popup:
+                self.open_popup()
+            return
+
         if self.config.auto_show_popup:
             self.open_popup()
 
@@ -269,18 +271,11 @@ class ApplicationController:
             return
         if not file_path:
             return
-        if self.popup.is_busy:
-            self.notifier.notify("An analysis is already running. Please wait.")
-            return
         # Manual picks are always analyzed, even if the same file was used before.
         self.popup.show_and_analyze(file_path)
 
     def analyze_clipboard(self) -> None:
         self._reset_idle_timer()
-        if self.popup.is_busy:
-            self.notifier.notify("An analysis is already running. Please wait.")
-            return
-
         clipboard_image = self._read_clipboard_image(silent=False)
         if not clipboard_image:
             self.notifier.notify(

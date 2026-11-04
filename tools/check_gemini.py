@@ -45,13 +45,13 @@ def build_sample(path: str) -> None:
 
 
 def main() -> int:
-    model = sys.argv[1] if len(sys.argv) > 1 else "gemini-3.5-flash"
+    model = sys.argv[1] if len(sys.argv) > 1 else "gemini-3-flash-preview"
     sample = os.path.join(tempfile.mkdtemp(), "mcq.png")
     build_sample(sample)
     print(f"Sample: {sample}")
     print(f"Model:  {model}")
     try:
-        text = GeminiService(model=model).analyze_image(sample)
+        text = GeminiService(gemini_model=model).analyze_image(sample)
     except GeminiServiceError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
