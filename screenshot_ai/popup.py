@@ -71,15 +71,16 @@ QProgressBar#progressBar::chunk {
     border-radius: 1px;
 }
 QTextBrowser {
-    background-color: rgba(255, 255, 255, 0.45);
-    border: 1px solid rgba(229, 231, 235, 0.75);
+    background-color: rgba(255, 255, 255, 0.50);
+    border: 1px solid rgba(209, 213, 219, 0.80);
     border-radius: 4px;
-    padding: 3px 5px;
-    color: #111827;
-    font-size: 9.5px;
-    line-height: 1.25;
-    selection-background-color: #e5e7eb;
-    selection-color: #111827;
+    padding: 3px 6px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    selection-background-color: #cbd5e1;
+    selection-color: #0f172a;
 }
 QPushButton {
     background-color: rgba(249, 250, 251, 0.75);
@@ -318,6 +319,10 @@ class ResultPopup(QDialog):
         self.result_view.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
+        res_font = self.result_view.font()
+        res_font.setPointSize(11)
+        res_font.setBold(True)
+        self.result_view.setFont(res_font)
         root.addWidget(self.result_view, 1)
 
     # ---------------------------------------------------------------- state --
@@ -495,17 +500,30 @@ class ResultPopup(QDialog):
         self.result_view.moveCursor(QTextCursor.MoveOperation.End)
         self.copy_button.setEnabled(True)
 
+    @staticmethod
+    def _extract_clean_answer(text: str) -> str:
+        """Isolate the single bold Answer line if extra thinking/reasoning text was generated."""
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in lines:
+            if line.startswith("**Answer:") or "**Answer:" in line:
+                return line
+        for line in lines:
+            if line.startswith("Answer:"):
+                return f"**{line}**"
+        return text.strip()
+
     @Slot(str)
     def _on_analysis_ok(self, text: str) -> None:
-        self._last_result = text
+        clean_text = self._extract_clean_answer(text)
+        self._last_result = clean_text
         self.progress_bar.setVisible(False)
-        self.result_view.setMarkdown(text)
+        self.result_view.setMarkdown(clean_text)
         self.result_view.moveCursor(QTextCursor.MoveOperation.Start)
         self._set_status("Done")
         screenshot_service.mark_processed(self._current_image or "")
         self.copy_button.setEnabled(True)
         self._cleanup_temp()
-        self.analysis_completed.emit(text)
+        self.analysis_completed.emit(clean_text)
 
     @Slot(str)
     def _on_analysis_failed(self, message: str) -> None:

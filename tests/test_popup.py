@@ -23,6 +23,8 @@ class TestPopup(unittest.TestCase):
         self.assertTrue(popup.copy_button is not None)
         self.assertFalse(popup.copy_button.isEnabled())
         self.assertFalse(popup.progress_bar.isVisible())
+        self.assertTrue(popup.result_view.font().bold())
+        self.assertEqual(popup.result_view.font().pointSize(), 11)
 
     def test_position_bottom_right(self):
         popup = ResultPopup()
@@ -41,6 +43,24 @@ class TestPopup(unittest.TestCase):
         # Second chunk
         popup._on_chunk_received("• Detailed reason")
         self.assertEqual(popup.last_result, "**Answer: Option A**\n• Detailed reason")
+
+    def test_extract_clean_answer(self):
+        # Case 1: Already clean answer
+        self.assertEqual(
+            ResultPopup._extract_clean_answer("**Answer: C) 21**"),
+            "**Answer: C) 21**",
+        )
+        # Case 2: Multi-line with reasoning before answer
+        multi = "Step 1: Check prime\nStep 2: Conclude\n**Answer: C) 21**\nDone"
+        self.assertEqual(
+            ResultPopup._extract_clean_answer(multi),
+            "**Answer: C) 21**",
+        )
+        # Case 3: Plain Answer: without asterisks
+        self.assertEqual(
+            ResultPopup._extract_clean_answer("Answer: B) 100"),
+            "**Answer: B) 100**",
+        )
 
     def test_analysis_worker_streaming(self):
         mock_service = mock.MagicMock()

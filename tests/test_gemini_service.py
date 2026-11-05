@@ -312,11 +312,11 @@ class TestGeminiService(unittest.TestCase):
         import base64
         from screenshot_ai.gemini_service import _dec_str, _PROMPT_B64
         decoded_prompt = _dec_str(base64.b64decode(_PROMPT_B64))
-        self.assertIn("verify each option against the question", decoded_prompt)
-        self.assertIn("ONE sentence", decoded_prompt)
-        self.assertIn("ultra-short and exact", decoded_prompt)
+        self.assertIn("Verify all calculations, code logic, and negative words", decoded_prompt)
+        self.assertIn("Output ONLY the single correct answer in bold", decoded_prompt)
+        self.assertIn("Do NOT include reasons, explanations", decoded_prompt)
 
-        # Test that _analyze_with_openai_compatible sets max_tokens = 120
+        # Test that _analyze_with_openai_compatible sets temperature = 0.0 and max_tokens = 800
         img_path = self.temp_path / "test.png"
         Image.new("RGB", (20, 20), "white").save(img_path)
         service = GeminiService(primary_provider="nvidia", nvidia_api_key="nvapi-test", enable_ovh=False)
@@ -347,7 +347,8 @@ class TestGeminiService(unittest.TestCase):
             res = service.analyze_image(str(img_path))
             self.assertEqual(res, "**Answer: Option A**")
             self.assertTrue(len(captured_payloads) > 0)
-            self.assertEqual(captured_payloads[0].get("max_tokens"), 600)
+            self.assertEqual(captured_payloads[0].get("max_tokens"), 800)
+            self.assertIsNone(captured_payloads[0].get("temperature"))
 
 
 if __name__ == "__main__":

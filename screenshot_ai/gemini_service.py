@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
@@ -29,7 +30,7 @@ _URL_GROQ = _dec_str(b'2)\x14\x13\x15SC@\x13\x05\x11U\x19\xf3\xeb\xf6\xa4\xee\xf
 _URL_OPENROUTER_DEF = _dec_str(b'2)\x14\x13\x15SC@\x1d\x05\x1d\x15\x0c\xee\xf1\xf3\xef\xff\xbe\xf2\xff\xb6\xfd\xef\xcb\x8a\xde\x9a')
 
 _PROMPT_B64 = (
-    "GzMBDx8TCU8GHR1bF+zl4O+jsNX/6+/rgtPN2cfXzZff3KOr5qa8u7u6tvu/hoWOhJ6E04KRmd9zcG14enh7eTQXEQ0GelhORlAYT1YkZCQlPyI2NS18PgwWHw4cURcbHxzy7/+zhqW41Pbo6cTWnYr2/8PC0NPR4omtv7q0pvf8/aWbh4qYz6aQgI/eLiRUZWFlZ392ckIIDyIZABF9WRpyDgZmOikhJjA2ODtbbkpKR1ohExgPEOyvorGuytbl8/jGg8PR3MPT29nP166qmuTHg4eEkJ+Lwre9p6uiztexmGVzJmB4L2d5bGl/DFdPRV9EE1dXWB8nPSkoOn8="
+    "GzMBDx8TCU8GHR1bF+zl4O+t8/Lk/PrqzsnRhY7n0cXT27njp6Wg77G0tLirjYWTg4KegNrZn5BmYChnYXZ9dDY9QU1CCUJKVVRMUkgkZDAlPzQgdnESEDZJSC42MjEnLlGgysjKw93A0NvPt4HQyIrP1ZOHiYya4qSrqLujtaO/8+qsk52cmobVt7WyWCRzYmgwYH93e3NHBUtEXENRVE4dIS01Pik9cjw2ezwOCANKAh5TGRcZX+7s5u60m7692/PT1MPblo/p+sjP166q54aopKezq/z5wqCQio2F1KOfhXQjKSlfYH5gbHJxT3kNACdjZ2Rwf2tiFx0HC2t0EzV9LiwySQUBERkNHxuh9uLr/v/95bW8+trVxMrA0MDe1dOz7+amvu+zu6H7sZWMgpjNh5yEnY/R"
 )
 
 
@@ -40,7 +41,7 @@ class GeminiServiceError(Exception):
 
 class GeminiService:
     """Service to handle vision AI inference across clean, unblocked providers:
-    1. Google Gemini (gemini-3-flash-preview - Free 1,500 RPD, Unblocked Everywhere)
+    1. Google Gemini (gemini-3.5-flash / gemini-3-flash-preview - Free 1,500 RPD, Unblocked Everywhere)
     2. Cloudflare Workers AI (@cf/meta/llama-3.2-11b-vision-instruct - 10,000 Neurons/Day)
     3. OVHcloud Kepler (Qwen2.5-VL-72B - 100% Free & Keyless, Unblocked on Lab Networks)
     4. NVIDIA NIM (meta/llama-3.2-11b-vision-instruct - Fast 11B Vision)
@@ -118,9 +119,10 @@ class GeminiService:
         self.connect_timeout = connect_timeout or config.http_connect_timeout
         self.read_timeout = read_timeout or config.http_read_timeout
 
-    def _optimize_image_for_ai(self, image_path: Path) -> Path:
+    def _optimize_image_for_ai(self, image_path: Union[str, Path]) -> Path:
         """Resize high-res screenshots to max 2048px (preserving crisp text readability),
         compress to 95% JPEG, and strip metadata for lightning-fast network uploads."""
+        image_path = Path(image_path)
         try:
             with Image.open(image_path) as img:
                 # Convert RGBA / P palette to RGB for JPEG encoding
@@ -141,8 +143,10 @@ class GeminiService:
                     new_h = max(1, int(orig_h * scale))
                     img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-                # Save to optimized temporary JPEG file
-                opt_path = image_path.with_name(f"{image_path.stem}_opt.jpg")
+                # Save to optimized temporary JPEG file in OS tempdir
+                handle, temp_path = tempfile.mkstemp(prefix="desk_opt_", suffix=".jpg")
+                os.close(handle)
+                opt_path = Path(temp_path)
                 img.save(opt_path, format="JPEG", quality=95, optimize=True)
                 return opt_path
         except Exception as e:
@@ -151,12 +155,13 @@ class GeminiService:
 
     def analyze_screenshot(
         self,
-        image_path: Path,
+        image_path: Union[str, Path],
         prompt: Optional[str] = None,
         callback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """Analyze a screenshot using the primary provider with automatic failover across
         Google Gemini, Cloudflare, OVHcloud Kepler, and NVIDIA NIM."""
+        image_path = Path(image_path)
         if not image_path.exists():
             raise GeminiServiceError(f"Image not found at {image_path}")
 
@@ -281,15 +286,24 @@ class GeminiService:
                             provider_name=f"Mistral AI ({self.mistral_model})",
                         )
                     elif provider == "gemini":
-                        result = self._analyze_with_openai_compatible(
-                            url=_URL_GEMINI,
-                            api_key=self.gemini_api_key,
-                            model=self.gemini_model,
-                            image_path=optimized_image_path,
-                            prompt=prompt,
-                            callback=callback,
-                            provider_name=f"Google Gemini ({self.gemini_model})",
-                        )
+                        for gem_attempt in range(2):
+                            try:
+                                result = self._analyze_with_openai_compatible(
+                                    url=_URL_GEMINI,
+                                    api_key=self.gemini_api_key,
+                                    model=self.gemini_model,
+                                    image_path=optimized_image_path,
+                                    prompt=prompt,
+                                    callback=callback,
+                                    provider_name=f"Google Gemini ({self.gemini_model})",
+                                )
+                                break
+                            except Exception as gem_err:
+                                err_str = str(gem_err).lower()
+                                if gem_attempt == 0 and ("429" in err_str or "rate limit" in err_str or "timeout" in err_str):
+                                    time.sleep(1.5)
+                                    continue
+                                raise
                     elif provider == "github":
                         result = self._analyze_with_openai_compatible(
                             url=_URL_GITHUB,
@@ -418,7 +432,7 @@ class GeminiService:
         payload = {
             "prompt": prompt,
             "image": b64_str,
-            "max_tokens": 600,
+            "max_tokens": 800,
             "stream": True,
         }
 
@@ -522,7 +536,7 @@ class GeminiService:
                     ],
                 }
             ],
-            "max_tokens": 600,
+            "max_tokens": 800,
             "stream": True,
         }
 
